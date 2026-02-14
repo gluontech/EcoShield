@@ -11,9 +11,6 @@ from .exposure import ExposureProfile
 from .vulnerability import VulnerabilityAssessment
 from .geometry import DataLineage
 
-from .vulnerability import VulnerabilityAssessment
-
-
 
 class ValidationMetrics(BaseModel):
     """
@@ -32,36 +29,36 @@ class ValidationMetrics(BaseModel):
 
 class HazardAssessmentResult(BaseModel):
     """
-    Complete hazard assessment with clean HxE×V separation.
+    Complete hazard assessment with clean HxE separation.
     This is the standard return type for all hazard tools.
     """
     # Core components
     hazard: HazardIntensity = Field(..., description="Hazard intensity (H)")
     exposure: ExposureProfile = Field(..., description="Exposure profile (E)")
     vulnerability: Optional[VulnerabilityAssessment] = Field(
-        None, 
+        None,
         description="Vulnerability (V)"
     )
-    
+
     # Computed impact
     impact_score: float = Field(
-        default=0.0, 
-        ge=0, 
-        le=100, 
+        default=0.0,
+        ge=0,
+        le=100,
         description="Impact score (0-100)"
     )
     impact_tier: RiskTier = Field(default=RiskTier.LOW, description="Risk tier")
-    
+
     # Validation (Gap 2.1)
     validation: Optional[ValidationMetrics] = None
     status: ValidationStatus = Field(
         default=ValidationStatus.UNVALIDATED,
         description="Validation status"
     )
-    
+
     # Intermediate values (for transparency)
     intermediate: Dict[str, Any] = Field(default_factory=dict)
-    
+
     # Aggregation metadata
     can_aggregate_with: List[HazardType] = Field(
         default_factory=list,
@@ -77,99 +74,123 @@ class HazardAssessmentResult(BaseModel):
 
 class ReturnPeriodLoss(BaseModel):
     """
-    Financial loss for a specific return period event.
+    Financial loss for a specific return period event (v3.2 — Gap Q).
     """
     return_period_years: int = Field(..., ge=1, description="Event return period")
+    exceedance_probability: float = Field(..., ge=0, le=1, description="1/RP")
+    damage_ratio: float = Field(..., ge=0, le=1.0, description="Damage as fraction of value")
     loss_usd: float = Field(..., ge=0, description="Financial loss (USD)")
-    loss_ratio: float = Field(..., ge=0, le=1.0, description="Loss ratio (0-1)")
-    
+    hazard_intensity: float = Field(default=0.0, description="Dominant hazard intensity")
+    hazard_intensity_unit: str = Field(default="m", description="Unit of hazard intensity")
+
     model_config = {"use_enum_values": True}
+
+
+# Gap Q: Standard return periods for multi-RP EAL calculation
+STANDARD_RETURN_PERIODS: List[int] = [10, 25, 50, 100, 250]
+
+
+def compute_eal_trapezoidal(
+    rp_losses: List[ReturnPeriodLoss],
+    replacement_value_usd: float,
+) -> float:
+    """
+    Compute Expected Annual Loss (EAL) using trapezoidal integration
+    of the loss-exceedance curve.
+
+    Args:
+        rp_losses: List of ReturnPeriodLoss (one per return period)
+        replacement_value_usd: Total replacement value for normalization check
+
+    Returns:
+        EAL in USD
+    """
+    if len(rp_losses) < 2:
+        return 0.0
+
+    # Sort by exceedance probability descending (high freq to low freq)
+    sorted_losses = sorted(rp_losses, key=lambda x: -x.exceedance_probability)
+
+    eal = 0.0
+    for i in range(len(sorted_losses) - 1):
+        p1 = sorted_losses[i].exceedance_probability
+        p2 = sorted_losses[i + 1].exceedance_probability
+        l1 = sorted_losses[i].loss_usd
+        l2 = sorted_losses[i + 1].loss_usd
+
+        prob_diff = p1 - p2
+        avg_loss = (l1 + l2) / 2.0
+        eal += prob_diff * avg_loss
+
+    return eal
 
 
 class StructureRiskResult(BaseModel):
     """
-    Aggregated risk result for a single structure across all hazards.
+    Per-building risk result across all hazards (v3.2 — multi-RP EAL).
     """
-    structure_id: str = Field(..., description="Building/Asset ID")
-    overall_risk_score: float = Field(..., ge=0, le=100, description="0-100 Risk Score")
-    risk_tier: RiskTier = Field(..., description="Overall risk tier")
-    
-    # Per-hazard breakdown
-    hazard_assessments: Dict[HazardType, HazardAssessmentResult] = Field(
-        default_factory=dict,
-        description="Detailed assessment per hazard type"
-    )
-    
-    # Financial metrics
-    aal_usd: Optional[float] = Field(None, ge=0, description="Average Annual Loss (USD)")
-    probable_max_loss_usd: Optional[float] = Field(None, ge=0, description="PML (USD)")
+    # Building identity
+    building_id: str = Field(..., description="Building ID")
+    latitude: float = Field(..., description="Building centroid latitude")
+    longitude: float = Field(..., description="Building centroid longitude")
+    footprint_area_m2: Optional[float] = Field(None, ge=0)
+
+    # Building characteristics
+    height_m: Optional[float] = Field(None, ge=0)
+    num_stories: int = Field(default=1, ge=1)
+    vulnerability_class: Optional[VulnerabilityClass] = None
+    ground_floor_elevation_m: float = Field(default=0.0, ge=0)
     replacement_value_usd: Optional[float] = Field(None, ge=0)
-    
-    data_lineage: Optional[DataLineage] = None
-    
+    replacement_value_source: str = Field(default="unknown")
+
+    # Per-hazard damage ratios (at primary RP)
+    flood_damage_ratio: float = Field(default=0.0, ge=0, le=1)
+    flood_depth_at_building_m: float = Field(default=0.0, ge=0)
+    surge_damage_ratio: float = Field(default=0.0, ge=0, le=1)
+    surge_depth_at_building_m: float = Field(default=0.0, ge=0)
+    pluvial_flood_damage_ratio: float = Field(default=0.0, ge=0, le=1)
+    pluvial_depth_at_building_m: float = Field(default=0.0, ge=0)
+    wind_damage_ratio: float = Field(default=0.0, ge=0, le=1)
+    max_wind_speed_ms: float = Field(default=0.0, ge=0)
+
+    # Subsidence (Gap S)
+    subsidence_mm_per_year: float = Field(default=0.0)
+    subsidence_cumulative_m: float = Field(default=0.0, ge=0)
+    subsidence_source: str = Field(default="none")
+
+    # Multi-RP loss curve (Gap Q)
+    losses_by_return_period: List[ReturnPeriodLoss] = Field(default_factory=list)
+
+    # Composite risk
+    max_damage_ratio: float = Field(default=0.0, ge=0, le=1)
+    combined_risk_score: float = Field(default=0.0, ge=0, le=100)
+    risk_tier: RiskTier = Field(default=RiskTier.LOW)
+    dominant_hazard: Optional[HazardType] = None
+
+    # Financial impact (v3.2: multi-RP EAL)
+    expected_annual_loss_usd: float = Field(default=0.0, ge=0)
+    probable_maximum_loss_usd: float = Field(default=0.0, ge=0)
+
+    # Metadata
+    data_sources: List[str] = Field(default_factory=list)
+    limitations: List[str] = Field(default_factory=list)
+
     model_config = {"use_enum_values": True}
-
-
-# Gap Q: Standard return periods for EAL calculation
-STANDARD_RETURN_PERIODS: List[int] = [2, 5, 10, 25, 50, 100, 200, 500, 1000]
-
-
-def compute_eal_trapezoidal(return_periods: List[int], losses: List[float]) -> float:
-    """
-    Compute Expected Annual Loss (EAL) using trapezoidal integration of the loss-frequency curve.
-    
-    Args:
-        return_periods: List of return periods in years (e.g. [2, 10, 100])
-        losses: Corresponding financial losses in USD
-    
-    Returns:
-        EAL in USD
-    """
-    if len(return_periods) != len(losses) or len(return_periods) < 2:
-        return 0.0
-        
-    # Sort by probability (1/RP) descending (high freq to low freq)
-    data = sorted(zip(return_periods, losses), key=lambda x: x[0])
-    rps, ls = zip(*data)
-    
-    probs = [1.0 / rp for rp in rps]
-    eal = 0.0
-    
-    # Trapezoidal rule
-    for i in range(len(probs) - 1):
-        p1, p2 = probs[i], probs[i+1] # p1 > p2 (1/2 > 1/5)
-        l1, l2 = ls[i], ls[i+1]
-        
-        prob_diff = p1 - p2
-        avg_loss = (l1 + l2) / 2.0
-        eal += prob_diff * avg_loss
-        
-    # Tail risk approximation (optional/simple for now)
-    return eal
 
 
 class PortfolioRiskSummary(BaseModel):
     """
-    Aggregated risk summary for a portfolio of assets.
-    Used for dashboard reporting.
+    Aggregated risk summary for a portfolio of buildings (v3.2).
     """
     portfolio_id: str = Field(..., description="Portfolio Identifier")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-    
-    total_assets: int = Field(..., ge=0)
-    total_replacement_value_usd: float = Field(..., ge=0)
-    
-    total_aal_usd: float = Field(..., ge=0, description="Total Annual Average Loss")
-    portfolio_risk_score: float = Field(..., ge=0, le=100)
-    
-    risk_tier_counts: Dict[RiskTier, int] = Field(
-        default_factory=dict, 
-        description="Count of assets per risk tier"
-    )
-    
-    top_risk_assets: List[StructureRiskResult] = Field(
-        default_factory=list,
-        description="Top 10 highest risk assets"
-    )
-    
+    city: str = Field(default="unknown")
+    total_buildings: int = Field(..., ge=0)
+    buildings_critical: int = Field(default=0, ge=0)
+    buildings_high: int = Field(default=0, ge=0)
+    buildings_moderate: int = Field(default=0, ge=0)
+    buildings_low: int = Field(default=0, ge=0)
+    total_replacement_value_usd: float = Field(default=0.0, ge=0)
+    total_expected_annual_loss_usd: float = Field(default=0.0, ge=0)
+    mean_damage_ratio: float = Field(default=0.0, ge=0, le=1)
+
     model_config = {"use_enum_values": True}

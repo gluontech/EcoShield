@@ -81,10 +81,8 @@ async def ingest_city_buildings(city: str, db_url: str = "sqlite:///:memory:") -
     
     # Save Google Buildings
     if structures:
-        # Pydantic serialization
         google_file = output_dir / f"{city}_google_buildings.json"
         with open(google_file, "w") as f:
-            # List of models -> json
             f.write("[" + ",".join([s.model_dump_json() for s in structures]) + "]")
             
     # Save Overture Buildings
@@ -92,13 +90,18 @@ async def ingest_city_buildings(city: str, db_url: str = "sqlite:///:memory:") -
         overture_file = output_dir / f"{city}_overture_buildings.json"
         import json
         with open(overture_file, "w") as f:
-            # List of dicts -> json
-            # Handle potential non-serializable types if any (datetime?)
-            # Overture dicts are simple types mostly
             json.dump(overture_enriched, f, default=str)
             
-    total = len(structures) + len(overture_enriched)
-    logger.info(f"  Ingested {total} buildings for {city}. Saved to {output_dir}")
+    # MVP Merge: Concatenate sources for downstream consumption
+    # Ideally we would spatial deduplicate (prefer Google over Overture)
+    combined = [s.model_dump() for s in structures] + overture_enriched
+    combined_file = output_dir / f"{city}_combined_buildings.json"
+    import json
+    with open(combined_file, "w") as f:
+        json.dump(combined, f, default=str)
+
+    total = len(combined)
+    logger.info(f"  Ingested {total} buildings (Google + Overture) for {city}. Saved merged to {combined_file}")
     return total
 
 

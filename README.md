@@ -1,2 +1,3 @@
-# EcoShield
-Climate intelligent SaaS 
+**EcoShield** is a **structure-level** climate risk intelligence Web SaaS platform for Southeast Asia. The platform delivers engineering-based climate risk analysis focused on **physical asset vulnerability and hazard exposure** at the individual building level. It models **8 hazards** specific to SEA cities — coastal, riverine, and **pluvial** flooding, subsidence, landslides, tropical cyclones, storm surge, and urban heat — using **Agno Workflows** for deterministic orchestration. MVP targets: **Ho Chi Minh City, Hanoi, Da Nang** (Vietnam).
+
+> **Resolution Transparency (v3.2):** Climate forcing comes from NEX-GDDP-CMIP6 at **0.25° (~25 km)**. Building-level differentiation within each 625 km² climate grid cell is achieved by overlaying terrain data (GLO-30 DEM at 30 m, HAND at 30 m, Landsat LST at 30 m) onto sub-meter building footprints. Climate projections (temperature change, precipitation change) are **uniform** within each grid cell. Every `HazardIntensity` output now carries a `climate_forcing_resolution_m` field for downstream consumers to assess granularity.

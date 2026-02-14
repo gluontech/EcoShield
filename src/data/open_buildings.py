@@ -114,6 +114,18 @@ class OpenBuildingsSource:
         # await self._cache_to_postgis(structures)
         
         return structures
+
+    async def _query_postgis(self, bbox: BoundingBox) -> List[StructuralCharacteristics]:
+        """Check PostGIS for cached buildings in bbox."""
+        # MVP: Return empty list to trigger GEE fetch.
+        # Implementation would involve reading from 'buildings' table using geopandas/sqlalchemy
+        return []
+
+    async def _cache_to_postgis(self, structures: List[StructuralCharacteristics]):
+        """Cache fetched buildings to PostGIS."""
+        # MVP: No-op.
+        # Implementation would involve converting models to GeoDataFrame and writing to PostGIS.
+        pass
     
     def _fetch_footprints_gee(
         self, bbox: BoundingBox, min_confidence: float

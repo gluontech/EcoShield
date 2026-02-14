@@ -85,3 +85,19 @@ class BoundingBox(BaseModel):
             self.min_lat <= location.lat <= self.max_lat and
             self.min_lon <= location.lon <= self.max_lon
         )
+
+    @computed_field
+    @property
+    def area_km2(self) -> float:
+        """Approximate area in square km (cosine corrected)."""
+        import math
+        mean_lat = (self.min_lat + self.max_lat) / 2
+        d_lat_deg = self.max_lat - self.min_lat
+        d_lon_deg = self.max_lon - self.min_lon
+        
+        # 1 deg lat approx 111 km
+        dy = d_lat_deg * 111.0
+        # 1 deg lon approx 111 * cos(lat)
+        dx = d_lon_deg * 111.0 * math.cos(math.radians(mean_lat))
+        
+        return abs(dx * dy)

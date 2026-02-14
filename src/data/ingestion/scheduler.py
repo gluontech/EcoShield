@@ -107,11 +107,9 @@ def _download_ibtracs():
         print(f"  Done ({dest.stat().st_size / 1e6:.1f} MB)")
     except Exception as e:
         print(f"  Failed: {e}")
-        # MVP: Create dummy file if download fails to allow tests to pass
+        # MVP: Raise error to prevent silent data issues
         if not dest.exists():
-            with open(dest, "w") as f:
-                f.write("SID,NAME,SEASON,BASIN,LAT,LON,WMO_WIND,WMO_PRES\n")
-            print("  Created dummy IBTrACS file for MVP.")
+            raise RuntimeError(f"Failed to download IBTrACS data and no local file exists: {e}")
 
 
 if __name__ == "__main__":

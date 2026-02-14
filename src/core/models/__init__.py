@@ -60,6 +60,8 @@ from .vulnerability import (
     JRC_ASIA_FLOOD_CURVES,  # NEW
     APP_OCCUPANCY_VALUE_MULTIPLIER, # NEW
 )
+# Alias for spec compatibility (Phase 3 tools import this name)
+OCCUPANCY_VALUE_MULTIPLIER = APP_OCCUPANCY_VALUE_MULTIPLIER
 from .surface import AdjustedSurface
 from .surface import BuildingAdjustedSurface  # NEW v3.2 (Gap S)
 from .results import (
@@ -132,6 +134,7 @@ __all__ = [
     "WindVulnerabilityParams",
     "JRC_ASIA_FLOOD_CURVES",
     "APP_OCCUPANCY_VALUE_MULTIPLIER",
+    "OCCUPANCY_VALUE_MULTIPLIER",     # Alias for Phase 3 spec
     # Surface
     "AdjustedSurface",
     "BuildingAdjustedSurface",    # NEW v3.2 (Gap S)
