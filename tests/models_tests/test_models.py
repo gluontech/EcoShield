@@ -146,7 +146,7 @@ def test_eal_calculation_trapezoidal():
     ]
     replacement_value = 100000
     
-    eal = compute_eal_trapezoidal(points, replacement_value)
+    eal = compute_eal_trapezoidal(points)
     
     # Expected logic:
     # 1. 0.1 to 0.02: avg loss (0.1+0.5)/2 * RV = 0.3*100k = 30k. Prob width = 0.08. Contribution = 2400.

@@ -139,7 +139,7 @@ class InSARVelocityResult(BaseModel):
     )
     num_observations: int = Field(
         ...,
-        ge=0,
+        ge=1,
         description="Number of SAR acquisitions"
     )
     resolution_m: int = Field(default=100, ge=1)

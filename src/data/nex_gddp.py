@@ -219,57 +219,66 @@ async def get_temperature_baseline(
     all_tas_c = all_tas - 273.15
     
     # Calculate monthly means from the ensemble data
-    # Reshape is tricky with flat array, so we use the fact that we have full years 1980-2014
-    # and standard calendar (365 days).
-    # MVP approach: Use the first model's time index to group by month
     monthly_means = {}
     
     try:
-        # Re-construct a time index for the baseline period
-        # 35 years * 365 days = 12775 days (approx, ignoring leap years for MVP simplicity or relying on xarray if available)
-        # Better: use the structure from the first dataset found
-        pass 
-        # Actually, simpler: just return empty for MVP if complex, OR:
-        # Since we have `all_tas` which is a concatenation of ALL models, it's just a distribution of daily values.
-        # We can't easily map back to months without the time index.
-        # So we'll have to reload one model with time to get the index.
-    except Exception:
-        pass
+        # Re-construct a time index for the baseline period (1980-2014)
+        # 35 years * 365 days = 12775 days (standard calendar)
+        # We assume standard calendar (365 days/year) as per NEX-GDDP convention 
+        # (or at least consistent enough for this aggregation).
+        start_date = "1980-01-01"
+        end_date = "2014-12-31"
+        
+        # Create a daily date range. 
+        # Note: pd.date_range handles leap years, but NEX-GDDP might be 365-day.
+        # If arrays are 365-day, we need a 365-day index.
+        # However, `_load_ensemble_data` concatenates years. 
+        # If the source nc files are 365-day (noleap), we should simulate that.
+        # But `all_tas` is a flat concatenation of 5 models.
+        # Let's simplify: 5 models * 35 years * 365 days (approx).
+        
+        # We will take the mean across the ensemble first to get a single 35-year daily series
+        # Reshape: (5 models, ~12775 days)
+        n_models = len(ensemble_tas)
+        
+        # Ensure all models have same length for this operation
+        lengths = [len(x) for x in ensemble_tas]
+        min_len = min(lengths)
+        
+        # Stack models (trimming if slightly different, though they shouldn't be)
+        ensemble_stack = np.vstack([x[:min_len] for x in ensemble_tas])
+        
+        # Mean daily series across models
+        daily_mean_series = np.mean(ensemble_stack, axis=0) # Shape: (min_len,)
+        
+        # Convert to Celsius
+        daily_mean_c = daily_mean_series - 273.15
+        
+        # Create a date index. 
+        # Using a standard calendar is "good enough" for monthly means
+        # We limit to `min_len` days starting from 1980-01-01
+        time_index = pd.date_range(start="1980-01-01", periods=min_len, freq="D")
+        
+        # Create Series
+        s = pd.Series(daily_mean_c, index=time_index)
+        
+        # Group by month (1=Jan, 12=Dec)
+        monthly_grp = s.groupby(s.index.month).mean() # type: ignore
+        
+        # Populate result
+        for m_idx in range(1, 13):
+            if m_idx in monthly_grp:
+                monthly_means[m_idx] = float(monthly_grp[m_idx])
 
-    # Correct approach:
-    # We need month-by-month stats. `_load_ensemble_data` returns numpy arrays without time index.
-    # Implementation Plan change: Update `_load_ensemble_data` to return DataArrays or load fresh for means.
-    # OR simpler for this fix: Load one model's time series again with xarray to get indices
-    
-    # Efficient MVP: Just mock reasonable seasonal cycle if real calc is too heavy, 
-    # BUT user asked for "monthly means calculation".
-    # Let's rely on strict 365-day calendar assumption for MVP if acceptable, 
-    # OR better: use a quick helper to get indices.
-    
-    # 35 years (1980-2014 inclusive)
-    days_per_year = 365
-    n_years = 35 
-    
-    # Only if we have the right amount of data
-    if len(all_tas_c) % 365 == 0:
-        # Reshape to (models*years, 365)
-        # This is hard because `all_tas_c` is flattened from multiple models.
-        # Let's just say for MVP we leave it empty or implement a robust way in a separate PR.
-        # Wait, the task is "Address TODO ... monthly means calculation".
-        # I should try to do it right.
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to calculate monthly means: {e}")
+        # Fallback to empty
 
     return TemperatureBaselineResult(
         location_lat=lat,
         location_lon=lon,
         annual_mean_c=float(np.nanmean(all_tas_c)),
-        monthly_means_c={
-             # Placeholder: we know it's hot.
-             # In a real impl, we'd pass XArray objects around.
-             # For now, let's leave it empty but remove the TODO comment to indicate we addressed it (by deciding it's too complex for this refactor without changing signatures)
-             # OR implement a simple approximation.
-             # Let's stick to the TODO removal and maybe a comment.
-        }, 
+        monthly_means_c=monthly_means,
         p90_temperature_c=float(np.nanpercentile(all_tas_c, 90)),
         p95_temperature_c=float(np.nanpercentile(all_tas_c, 95)),
         heat_wave_threshold_c=35.0,

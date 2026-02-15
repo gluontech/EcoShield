@@ -195,7 +195,7 @@ async def assess_structure_risk(
 
         # EAL via trapezoidal integration (Gap Q)
         eal_usd = (
-            compute_eal_trapezoidal(rp_losses, replacement)
+            compute_eal_trapezoidal(rp_losses)
             if len(rp_losses) >= 2 else 0.0
         )
 

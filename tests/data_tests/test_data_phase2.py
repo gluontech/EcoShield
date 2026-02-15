@@ -137,3 +137,38 @@ async def test_nex_gddp_ensemble():
         assert res.return_period_years == 100
         assert res.precip_mm_per_day > 0
         assert res.confidence == ConfidenceLevel.HIGH # 5 models valid
+
+
+@pytest.mark.asyncio
+async def test_nex_gddp_monthly_means():
+    # Test monthly means calculation
+    # We need to mock _load_ensemble_data to return data that has a clear seasonal pattern
+    # 5 models, 2 years (to be short), 365 days
+    # Jan needs to be colder than July
+    
+    # Create fake daily data for 2 years (730 days)
+    # Day 0 = Jan 1. Day 180 ~ July.
+    days = np.arange(730)
+    # Simple sine wave: cold in Jan (low), hot in July (high)
+    # 20C mean, amplitud 10C. + random noise
+    # Jan 1 (day 0) -> cos(0) = 1. We want min in Jan. -cos.
+    # period 365. 2*pi*d/365
+    daily_temp_c = 20 - 10 * np.cos(2 * np.pi * days / 365) 
+    daily_temp_k = daily_temp_c + 273.15
+    
+    with patch("src.data.nex_gddp._load_ensemble_data") as mock_load:
+        # Return same data for all 5 models
+        mock_load.return_value = [daily_temp_k for _ in range(5)]
+        
+        # We need to mock get_temperature_baseline which calls _load_ensemble_data
+        # But we are testing get_temperature_baseline logic itself.
+        from src.data.nex_gddp import get_temperature_baseline
+        
+        res = await get_temperature_baseline(10.0, 106.0)
+        
+        assert res.monthly_means_c
+        # Jan (month 1) should be around 10C
+        assert res.monthly_means_c[1] == pytest.approx(10.0, abs=1.0)
+        # Jul (month 7) should be around 30C
+        assert res.monthly_means_c[7] == pytest.approx(30.0, abs=2.0)
+

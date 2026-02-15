@@ -4,7 +4,7 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, model_validator
 from .enums import RiskTier, HazardType, VulnerabilityClass, ConfidenceLevel, ValidationStatus
 from .hazard import HazardIntensity
 from .exposure import ExposureProfile
@@ -87,12 +87,11 @@ class ReturnPeriodLoss(BaseModel):
 
 
 # Gap Q: Standard return periods for multi-RP EAL calculation
-STANDARD_RETURN_PERIODS: List[int] = [10, 25, 50, 100, 250]
+STANDARD_RETURN_PERIODS: List[int] = [2, 5, 10, 25, 50, 100, 250, 500, 1000]
 
 
 def compute_eal_trapezoidal(
     rp_losses: List[ReturnPeriodLoss],
-    replacement_value_usd: float,
 ) -> float:
     """
     Compute Expected Annual Loss (EAL) using trapezoidal integration
@@ -100,7 +99,6 @@ def compute_eal_trapezoidal(
 
     Args:
         rp_losses: List of ReturnPeriodLoss (one per return period)
-        replacement_value_usd: Total replacement value for normalization check
 
     Returns:
         EAL in USD
@@ -142,6 +140,14 @@ class StructureRiskResult(BaseModel):
     ground_floor_elevation_m: float = Field(default=0.0, ge=0)
     replacement_value_usd: Optional[float] = Field(None, ge=0)
     replacement_value_source: str = Field(default="unknown")
+
+    @model_validator(mode='before')
+    @classmethod
+    def map_structure_id(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if 'structure_id' in data and 'building_id' not in data:
+                data['building_id'] = data.pop('structure_id')
+        return data
 
     # Per-hazard damage ratios (at primary RP)
     flood_damage_ratio: float = Field(default=0.0, ge=0, le=1)
