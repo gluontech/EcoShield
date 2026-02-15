@@ -2,7 +2,7 @@
 # src/core/models/geometry.py
 """Location and geometry models."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field, field_validator, computed_field
 from .enums import DataSource
 
@@ -57,7 +57,10 @@ class DataLineage(BaseModel):
     Ensures auditability of every model output.
     """
     source: DataSource = Field(..., description="Primary data source")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Processing timestamp")
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Processing timestamp"
+    )
     version: str = Field(default="v3.2.0", description="Model/Data version")
     processor: str = Field(default="EcoShield Core", description="Processing system")
 

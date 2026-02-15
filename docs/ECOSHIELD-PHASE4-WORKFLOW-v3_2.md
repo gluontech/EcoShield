@@ -8,7 +8,7 @@
 > PostGIS buildings cache) and Step 4 (structure-level H×E×V risk per building).
 > **v3.2 Gap Fixes**:
 > - **8 hazard tools** (was 7): Added `assess_pluvial_flood` in Step 3 (Gap M).
-> - **Multi-RP loop**: Steps 2-3 run at [10, 25, 50, 100, 250] year RPs,
+> - **Multi-RP loop**: Steps 2-3 run at [2, 5, 10, 25, 50, 100, 250, 500, 1000] year RPs,
 >   feeding `hazard_results_by_rp` to structure risk for trapezoidal EAL (Gap Q).
 > - **Per-building surface**: Step 0 now creates `BuildingAdjustedSurface`
 >   per building from centroid elevation + spatially interpolated subsidence (Gap S).
@@ -220,7 +220,7 @@ Execution Order (hard dependencies) — v3.2: 6 steps, 8 hazards, multi-RP:
   Step 2 — Cyclone (Sequential): IBTrACS + Holland (2008) (Gap P)
            → Outputs: CycloneEventParams (wind, pressure, RMW)
   Step 3 — Acute Hazards (Parallel, Multi-RP): Flood + Surge + Landslide + Pluvial (Gap M)
-           → Runs at STANDARD_RETURN_PERIODS = [10, 25, 50, 100, 250] (Gap Q)
+           → Runs at STANDARD_RETURN_PERIODS = [2, 5, 10, 25, 50, 100, 250, 500, 1000] (Gap Q)
            → Inputs: AdjustedSurface from Step 1, CycloneParams from Step 2
            → Outputs: {return_period: {HazardType: HazardAssessmentResult}}
   Step 4 — Structure Risk (v3.2): Multi-RP H×E×V per building
@@ -279,7 +279,7 @@ def create_hazard_assessment_workflow() -> Workflow:
     │   └── assess_cyclone() → CycloneEventParams              │
     ├──────────────────────────────────────────────────────────┤
     │ Step 3: Acute Hazards (Parallel × Multi-RP — Gap Q)      │
-    │   ├── FOR EACH RP in [10, 25, 50, 100, 250]:            │
+    │   ├── FOR EACH RP in [2, 5, 10, 25, 50, 100, 250, 500, 1000]:            │
     │   │   ├── assess_storm_surge(cyclone, surface, bathy)    │
     │   │   ├── assess_coastal_flood(surface, ipcc_slr, city)  │
     │   │   ├── assess_riverine_flood(surface, rating_curve)   │
@@ -317,7 +317,7 @@ def create_hazard_assessment_workflow() -> Workflow:
             Step(
                 name="acute_hazards",
                 executor=assess_acute_hazards_step,
-                description="Acute: flood + surge + landslide + pluvial × multi-RP [10-250yr]"
+                description="Acute: flood + surge + landslide + pluvial × multi-RP [2-1000yr]"
             ),
             Step(
                 name="structure_risk",
@@ -363,7 +363,7 @@ async def run_hazard_assessment(
 
     # v3.2 (Gap Q): Determine return periods for multi-RP loop
     if multi_rp:
-        rp_list = return_periods or STANDARD_RETURN_PERIODS  # [10, 25, 50, 100, 250]
+        rp_list = return_periods or STANDARD_RETURN_PERIODS  # [2, 5, 10, 25, 50, 100, 250, 500, 1000]
     else:
         rp_list = [return_period]  # Backward-compatible single-RP mode
 
@@ -668,7 +668,7 @@ v3.2 Changes:
   - Gap J: assess_riverine_flood now receives `city` for rating_curve params.
   - Gap K: assess_coastal_flood now receives `city` for ipcc_slr regional SLR.
   - Gap Q: Multi-RP loop — runs acute hazards at each return period in
-           STANDARD_RETURN_PERIODS = [10, 25, 50, 100, 250].
+           STANDARD_RETURN_PERIODS = [2, 5, 10, 25, 50, 100, 250, 500, 1000].
            Returns {return_period: {hazard_name: HazardAssessmentResult}}.
 
 Dependencies:
@@ -1265,7 +1265,7 @@ from src.core.models import STANDARD_RETURN_PERIODS
 result = asyncio.run(run_hazard_assessment(
     lat=10.8, lon=106.6, city="hcmc",
     return_period=100, time_horizon=2050, slr_scenario="ssp245",
-    multi_rp=True,  # v3.2: runs [10, 25, 50, 100, 250]
+    multi_rp=True,  # v3.2: runs [2, 5, 10, 25, 50, 100, 250, 500, 1000]
 ))
 print(f"HCMC Acute: {result.acute_risk.composite_score}")
 print(f"HCMC Chronic: {result.chronic_risk.composite_score}")
@@ -1317,13 +1317,13 @@ print(f"HCMC Single-RP Acute: {result_single.acute_risk.composite_score}")
     └── assess_cyclone()         → IBTrACS + Holland (2008) (Gap P) → CycloneEventParams
 
 [Step 3] acute_hazards (parallel × multi-RP — Gap Q)
-    └── FOR EACH RP in [10, 25, 50, 100, 250]:
+    └── FOR EACH RP in [2, 5, 10, 25, 50, 100, 250, 500, 1000]:
         ├── assess_riverine_flood()  → GloFAS + rating_curve (Gap J) + HAND + surface
         ├── assess_coastal_flood()   → ipcc_slr per-city (Gap K) + GLO-30 + surface
         ├── assess_storm_surge()     → IBTrACS params + GEBCO + GLO-30 + surface
         ├── assess_pluvial_flood()   → HAND + slope + NDVI + NEX-GDDP (NEW Gap M)
         └── assess_landslide()       → GLO-30 slope + NEX-GDDP + SoilGrids + S2 NDVI
-    → Output: hazard_results_by_rp = {10: {...}, 25: {...}, 50: {...}, 100: {...}, 250: {...}}
+    → Output: hazard_results_by_rp = {2: {...}, 10: {...}, 100: {...}, 1000: {...}}
 
 [Step 4] structure_risk (v3.2: multi-RP EAL)
     └── assess_structure_risk()
@@ -1332,7 +1332,7 @@ print(f"HCMC Single-RP Acute: {result_single.acute_risk.composite_score}")
         │   ├── JRC flood damage curve at each RP (riverine + coastal + pluvial + surge)
         │   ├── Wind damage at each RP
         │   ├── OCCUPANCY_VALUE_MULTIPLIER × replacement_value (Gap T)
-        │   └── trapezoidal EAL = ∫₀¹ L(p) dp over [10,25,50,100,250] (Gap Q)
+        │   └── trapezoidal EAL = ∫₀¹ L(p) dp over [2,...,1000] (Gap Q)
         └── → List[StructureRiskResult] + PortfolioRiskSummary
 
 [Step 5] composite
@@ -1350,7 +1350,7 @@ print(f"HCMC Single-RP Acute: {result_single.acute_risk.composite_score}")
 | **L** | Subsidence source tracked from tool intermediate → per-building `subsidence_source` | Step 1 (chronic_hazards) |
 | **M** | `assess_pluvial_flood` added to Step 3 parallel dispatch + pluvial_flood in city configs + weights | Step 3, §1, §9 |
 | **P** | Cyclone tool uses Holland (2008) internally (transparent to workflow) | Step 2 (cyclone_step) |
-| **Q** | Multi-RP loop: Steps 2-3 run at [10,25,50,100,250]; Step 4 receives `hazard_results_by_rp` for trapezoidal EAL | Steps 3, 4, main workflow |
+| **Q** | Multi-RP loop: Steps 2-3 run at [2,5,10,25,50,100,250,500,1000]; Step 4 receives `hazard_results_by_rp` for trapezoidal EAL | Steps 3, 4, main workflow |
 | **S** | `BuildingAdjustedSurface` created in Step 0, populated in Step 1, consumed in Step 4 | Steps 0, 1, 4 |
 | **T** | `OCCUPANCY_VALUE_MULTIPLIER` applied inside `assess_structure_risk()` (no workflow code change) | Step 4 (via tool) |
 

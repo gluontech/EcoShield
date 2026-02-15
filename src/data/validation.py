@@ -129,8 +129,8 @@ def validate_no_nan(func: Callable) -> Callable:
     async def wrapper(*args, **kwargs):
         result = await func(*args, **kwargs)
         # Check all float fields in Pydantic model
-        if hasattr(result, 'model_fields'):
-            for field_name, field_info in result.model_fields.items():
+        if hasattr(type(result), 'model_fields'):
+            for field_name, field_info in type(result).model_fields.items():
                 value = getattr(result, field_name, None)
                 if isinstance(value, float) and (np.isnan(value) or np.isinf(value)):
                     DataQualityWarning(

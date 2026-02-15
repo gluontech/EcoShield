@@ -1803,6 +1803,16 @@ class StructureRiskResult(BaseModel):
     building_id: str = Field(..., description="Unique building ID")
     latitude: float
     longitude: float
+
+    @model_validator(mode='before')
+    @classmethod
+    def map_structure_id(cls, data: Any) -> Any:
+        """Alias structure_id to building_id (backward compatibility)."""
+        if isinstance(data, dict):
+            if 'structure_id' in data and 'building_id' not in data:
+                data['building_id'] = data.pop('structure_id')
+        return data
+
     footprint_area_m2: float = Field(..., gt=0)
     
     # Building characteristics (from asset layer)
@@ -1909,12 +1919,11 @@ class ReturnPeriodLoss(BaseModel):
 
 
 # Standard return periods for EAL computation (v3.2)
-STANDARD_RETURN_PERIODS = [10, 25, 50, 100, 250]
+STANDARD_RETURN_PERIODS = [2, 5, 10, 25, 50, 100, 250, 500, 1000]
 
 
 def compute_eal_trapezoidal(
-    losses: List[ReturnPeriodLoss],
-    replacement_value_usd: float
+    losses: List[ReturnPeriodLoss]
 ) -> float:
     """
     Compute Expected Annual Loss via trapezoidal integration (Gap Q fix).
@@ -1926,7 +1935,6 @@ def compute_eal_trapezoidal(
     
     Args:
         losses: List of ReturnPeriodLoss sorted by RP ascending
-        replacement_value_usd: Building replacement value
     
     Returns:
         EAL in USD/year
@@ -1941,16 +1949,16 @@ def compute_eal_trapezoidal(
     for i in range(len(sorted_losses) - 1):
         p_high = sorted_losses[i].exceedance_probability
         p_low = sorted_losses[i + 1].exceedance_probability
-        l_high = sorted_losses[i].damage_ratio * replacement_value_usd
-        l_low = sorted_losses[i + 1].damage_ratio * replacement_value_usd
+        l_high = sorted_losses[i].loss_usd or 0.0
+        l_low = sorted_losses[i + 1].loss_usd or 0.0
         eal += 0.5 * (l_high + l_low) * (p_high - p_low)
     
     # Add tail: loss from p=0 to smallest p (assume constant at max RP loss)
     # and from largest p to p=1 (assume zero loss beyond most frequent RP)
     smallest_p = sorted_losses[-1].exceedance_probability
     largest_p = sorted_losses[0].exceedance_probability
-    max_rp_loss = sorted_losses[-1].damage_ratio * replacement_value_usd
-    min_rp_loss = sorted_losses[0].damage_ratio * replacement_value_usd
+    max_rp_loss = sorted_losses[-1].loss_usd or 0.0
+    min_rp_loss = sorted_losses[0].loss_usd or 0.0
     
     # Upper tail (rare events): constant loss from smallest_p to p=0
     eal += max_rp_loss * smallest_p

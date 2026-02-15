@@ -10,7 +10,7 @@
 
 v3.2 extends v3.1 with **critical methodological and code fixes** identified via cross-analysis:
 
-- **Multi-return-period EAL integration** — EAL is now computed via trapezoidal integration over the full loss-exceedance curve (RPs 10, 25, 50, 100, 250), not a single scenario loss. (Gap Q)
+- **Multi-return-period EAL integration** — EAL is now computed via trapezoidal integration over the full loss-exceedance curve (RPs 2, 5, 10, 25, 50, 100, 250, 500, 1000), not a single scenario loss. (Gap Q)
 - **Discharge → depth conversion** — Manning's equation rating curve converts GloFAS discharge (m³/s) to water level (m) for riverine flood depth calculation. (Gap J)
 - **Real ensemble uncertainty** — Multi-model spread from 5 GCMs replaces fabricated `change × 0.7/1.3` bounds. (Gap I)
 - **Pluvial flood model** — Surface water flooding from intense rainfall, the most frequent flood type in SEA cities, is now modeled. (Gap M)
@@ -51,7 +51,7 @@ The core output is **H×E×V per building**: Hazard intensity × Exposure (build
 | **Building Attributes** | Overture Maps Buildings (S3 GeoParquet) | 2.6B conflated footprints, OSM material/type tags (**NEW v3.1**) |
 | **Vulnerability Curves** | JRC Global Flood Depth-Damage (Huizinga 2017) | 4-class material system, Asia-calibrated (**NEW v3.1**) |
 | **Risk Output** | Structure-level H×E×V | Per-building damage ratio, EAL, PML (**NEW v3.1**) |
-| **EAL Method** | Multi-RP trapezoidal integration | RPs [10,25,50,100,250] → loss-exceedance curve (**FIX v3.2 — Gap Q**) |
+| **EAL Method** | Multi-RP trapezoidal integration | RPs [2,5,10,25,50,100,250,500,1000] → loss-exceedance curve (**FIX v3.2 — Gap Q**) |
 | **Discharge→Depth** | Manning's equation rating curve | `rating_curve.py` converts GloFAS m³/s → water level m (**FIX v3.2 — Gap J**) |
 | **Wind Field Model** | Holland (2008) revised parametric vortex | B-parameter from Vmax + Pc, clamped [1.0, 2.5] (**FIX v3.2 — Gap P**) |
 | **Pluvial Flood** | HAND + slope + impervious + extreme precip | Surface water flooding proxy for SEA cities (**NEW v3.2 — Gap M**) |
@@ -546,7 +546,7 @@ The workflow enforces this execution order, ensuring subsidence results feed int
 │  │  │   flood_depth = hazard_water_level - effective_ground_floor  │   │  │
 │  │  │   damage_ratio = JRC_curve.interpolate(flood_depth)          │   │  │
 │  │  │   loss_usd = damage_ratio × replacement_value               │   │  │
-│  │  │   ↓ Repeat for RPs [10, 25, 50, 100, 250] (FIX v3.2 Gap Q) │   │  │
+│  │  │   ↓ Repeat for RPs [2, 5, 10, 25, 50, 100, 250, 500, 1000] (FIX v3.2 Gap Q) │   │  │
 │  │  │   EAL = ∫₀¹ L(p) dp  (trapezoidal on loss-exceedance)      │   │  │
 │  │  │   → StructureRiskResult (per building, multi-RP)             │   │  │
 │  │  └──────────────────────────────────────────────────────────────┘   │  │

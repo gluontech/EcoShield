@@ -2,7 +2,7 @@
 """Unit tests for EcoShield v3.2 core models."""
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from src.core.models import *
 
 def test_location_validation():
@@ -28,7 +28,7 @@ def test_data_lineage_integration():
         source=DataSource.GOOGLE_OPEN_BUILDINGS_V3,
         version="v1.0"
     )
-    assert lineage.timestamp <= datetime.utcnow()
+    assert lineage.timestamp <= datetime.now(timezone.utc)
     assert lineage.processor == "EcoShield Core"
 
 # --- Gap 2.1: Validation Metrics ---
