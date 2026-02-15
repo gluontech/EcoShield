@@ -305,4 +305,156 @@ If a `ReportAgent` or narrative synthesis layer is added in the future:
 
 ---
 
+## 8. Revised Assessment: Keeping Agno for Future LLM-Driven Features
+
+The original recommendation (sections 5-7) was based solely on the current codebase, where
+Agno provides zero runtime value. However, the product roadmap includes features that
+genuinely benefit from LLM reasoning. This section re-evaluates the trade-offs.
+
+### 8.1 Future Features Where an LLM Adds Real Value
+
+#### Asset Retrofitting Recommendations
+
+This is the strongest case for LLM + agent integration. Retrofitting advice requires:
+
+- **Multi-hazard reasoning** — A building with flood EAL of $12K/yr and wind damage ratio
+  of 0.15 needs different interventions than one with subsidence at 40mm/yr. An LLM can
+  weigh trade-offs across hazard types, building materials, and local construction costs.
+- **Contextual knowledge** — Building codes (Vietnam QCVN, Philippine NSCPs), local
+  material availability, cost databases. This is a classic RAG use case where Agno's
+  `knowledge=` + `search_knowledge=True` pattern applies directly.
+- **Natural language output** — Retrofit recommendations must be human-readable,
+  actionable, and tailored to the building's risk profile. This is not deterministic.
+
+Example Agno fit:
+```
+RetrofitAgent(
+    model=DeepSeekChat(...),
+    tools=[assess_structure_risk, lookup_building_codes, estimate_retrofit_cost],
+    knowledge=local_building_code_kb,
+    output_schema=RetrofitRecommendation,  # Pydantic structured output
+)
+```
+
+#### Carbon / ESG / TCFD Reporting
+
+Climate risk disclosure under TCFD, ISSB, and EU CSRD requires:
+
+- **Narrative synthesis** — Translating quantitative risk outputs (EAL, damage ratios,
+  hazard intensities) into regulatory-compliant disclosure language.
+- **Scenario analysis narratives** — Explaining what SSP245 vs SSP585 means for a
+  specific portfolio in plain language, with appropriate caveats.
+- **Materiality assessment** — Interpreting which climate risks are "material" for a
+  given portfolio composition. This involves judgment, not just thresholds.
+
+Example Agno fit:
+```
+ReportAgent(
+    model=DeepSeekChat(...),
+    tools=[get_portfolio_summary, get_hazard_breakdown],
+    output_schema=TCFDDisclosureSection,
+)
+```
+
+#### Interactive Risk Q&A
+
+A chat-based interface where users ask questions about their portfolio's risk:
+- "Why is Building #4521 rated Critical?"
+- "What would happen to our HCMC portfolio EAL if subsidence doubles?"
+- "Compare our flood exposure in District 7 vs District 2."
+
+This requires Agno's `chat history` + `memory` features, and the `Team` pattern could
+coordinate a ClimateAgent (data retrieval) + AnalysisAgent (reasoning) + ReportAgent
+(synthesis).
+
+### 8.2 What Agno Provides That Matters for These Use Cases
+
+| Agno Feature | Retrofitting | Carbon Reporting | Interactive Q&A |
+|---|---|---|---|
+| **Agent + Tool registration** | Tools = hazard assessors + cost estimators | Tools = portfolio queries + hazard summaries | Tools = all data access functions |
+| **Structured output** (`output_schema`) | `RetrofitRecommendation` Pydantic model | `TCFDDisclosureSection` model | Typed responses |
+| **Knowledge / RAG** | Building codes, material costs | TCFD/ISSB templates, regulatory guidance | Historical assessments |
+| **Chat history / memory** | Not needed | Not needed | Core requirement |
+| **Team** (multi-agent) | Possibly (cost agent + code agent) | Not needed | Climate + Analysis + Report agents |
+| **Workflow** (deterministic) | Retrofit pipeline: assess → recommend → cost | Report pipeline: gather → synthesize → format | Not needed (dynamic Q&A) |
+| **AgentOS** (deployment) | Production deployment wrapper | Same | Same |
+
+### 8.3 The Case FOR Keeping Agno (Despite Current Non-Use)
+
+**1. Avoiding a future re-integration tax.** If Agno is removed now and re-added in 6
+months for retrofitting/reporting, the team will need to: re-learn the framework, re-add
+the dependency, restructure the workflow layer to accommodate agents, and retrofit the
+tool functions for Agno tool registration. The `agno-rules.md` file and architectural
+decisions would need to be recreated.
+
+**2. Tool registration is lightweight.** Agno's `tools=[assess_riverine_flood, ...]`
+pattern means the existing async functions can be registered as agent tools without
+modification. The current tool implementations (pure functions returning Pydantic models)
+are already Agno-compatible — they just need to be wired up.
+
+**3. Structured output is already aligned.** Every tool returns Pydantic models, which
+is exactly what Agno's `output_schema` expects. There is no impedance mismatch.
+
+**4. Dependency cost is modest.** The ~6 MB footprint increase from Agno is small relative
+to the geospatial stack (numpy, scipy, xarray, rasterio, geopandas = ~200+ MB). Agno adds
+< 3% to the total dependency footprint.
+
+### 8.4 The Case AGAINST Keeping Agno (Even With Future Plans)
+
+**1. YAGNI for 6+ months.** The MVP targets Q1-Q2 2026. Retrofitting and carbon reporting
+are post-MVP features. Carrying an unused dependency for 6 months violates the principle
+of only adding what you need now.
+
+**2. Framework lock-in before validation.** Agno is relatively new (first stable release
+2025). Committing to it now, before any agent code is written, means the team hasn't
+validated that Agno's agent/team/workflow patterns actually fit EcoShield's specific
+needs. Other agent frameworks (LangGraph, CrewAI, or direct SDK calls) might be better
+suited — but that evaluation can't happen until agent features are actually built.
+
+**3. The deterministic pipeline does not benefit.** Even with future LLM features, the
+core hazard assessment pipeline (Steps 0-5) should remain deterministic and LLM-free, as
+the gaps analysis correctly recommends. Agno Workflow is overkill for a sequential async
+pipeline — it adds `StepOutput` wrappers, database persistence, and session management
+that a 30-line Pipeline class handles equally well.
+
+**4. LLM features can use Agno when they arrive.** Adding `agno` to `pyproject.toml` and
+writing an agent takes 30 minutes when the feature is actually being built. The existing
+tool functions will work as Agno tools without changes. There is no meaningful "re-
+integration tax" — the functions are already Agno-compatible by design.
+
+**5. Phantom architecture creates confusion.** The current state — where docs describe
+an elaborate agent architecture that doesn't exist in code — actively misleads developers.
+New team members will expect to find `ClimateAgent`, `HazardAgent`, and `ReportAgent` in
+`src/agents/` and will instead find an empty heartbeat loop.
+
+### 8.5 Revised Recommendation: Phased Approach
+
+| Phase | Timeline | Framework | LLM |
+|---|---|---|---|
+| **MVP** (now) | Q1-Q2 2026 | Pure asyncio Pipeline | None |
+| **v1.1** (reporting) | Q3-Q4 2026 | Keep Pipeline for hazards; add Agno for ReportAgent | DeepSeek or Claude for narration |
+| **v2.0** (retrofitting) | 2027 | Pipeline + Agno agents for recommendations | LLM for reasoning + RAG |
+
+**Concrete actions:**
+
+1. **Now:** Remove `agno` from `pyproject.toml` and the lockfile. Implement the 30-line
+   asyncio Pipeline for the hazard assessment workflow. Update docs to reflect reality.
+
+2. **When building ReportAgent (v1.1):** Re-add `agno` with a scoped role. Create a
+   `ReportAgent` that consumes `FullRiskProfile` and produces narrative reports. Register
+   existing hazard tools on the agent for data retrieval. Keep the hazard pipeline
+   deterministic and separate — the agent only touches narration.
+
+3. **When building RetrofitAgent (v2.0):** Expand to Agno Team if multi-agent coordination
+   is needed. Add RAG knowledge base for building codes. The `output_schema` pattern
+   ensures structured, auditable recommendations.
+
+**This approach gives you:**
+- Clean MVP with no phantom dependencies
+- Validated framework choice when LLM features actually ship
+- Clear separation: deterministic numeric pipeline vs. LLM-powered reasoning
+- No wasted effort — existing tools are already Agno-compatible by design
+
+---
+
 *Analysis based on: git commit 0e851b0, all files in src/, docs/, .agent/, pyproject.toml, requirements.txt, uv.lock*
