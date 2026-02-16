@@ -32,6 +32,7 @@ async def assess_coastal_flood(
     surface: Optional[AdjustedSurface] = None,
     tidal_range_m: float = 2.0,
     city: str = "ho_chi_minh_city",
+    return_period: int = 100,
 ) -> HazardAssessmentResult:
     """
     Assess coastal flood risk using bathtub SLR model.

@@ -107,8 +107,8 @@ async def calculate_composite_step(data: Dict[str, Any]) -> Dict[str, Any]:
         methodology={
             "version": "3.2",
             "orchestration": "AsyncIO Pipeline",
-            "acute_aggregation": "Max score (MVP)",
-            "chronic_aggregation": "Max score (MVP)",
+            "acute_aggregation": "Weighted sum (City-specific weights)",
+            "chronic_aggregation": "Weighted sum (City-specific weights)",
             "composite_logic": "Separated Acute/Chronic (No cross-aggregation)"
         },
         
@@ -144,12 +144,12 @@ def _aggregate_risks(
 
     scores = {}
     weights = {}
-    total_score = 0.0
-    max_score = 0.0
+    weighted_sum = 0.0
+    total_weight = 0.0
     
-    # Uncertainty Tracking (Fix H3)
-    p5_values = []
-    p95_values = []
+    # Uncertainty Tracking (Fix H3/N5)
+    p5_weighted_sum = 0.0
+    p95_weighted_sum = 0.0
     
     confidences = []
     
@@ -161,39 +161,46 @@ def _aggregate_risks(
         w = weight_map.get(name, 1.0)
         weights[name] = w
         
-        max_score = max(max_score, s)
+        # Weighted accumulation
+        weighted_sum += s * w
+        total_weight += w
+        
         confidences.append(res.hazard.confidence)
         
-        # H3: Track real uncertainty bounds
-        # If tool didn't provide range, use score +/- 0 (conservative)
-        p5 = res.impact_score_p5 if hasattr(res, 'impact_score_p5') and res.impact_score_p5 is not None else s
-        p95 = res.impact_score_p95 if hasattr(res, 'impact_score_p95') and res.impact_score_p95 is not None else s
-        p5_values.append(p5)
-        p95_values.append(p95)
+        # H3/N5: Track real uncertainty bounds
+        # Use fields on result if available, else fallback to score
+        p5 = res.impact_score_p5 if res.impact_score_p5 is not None else s
+        p95 = res.impact_score_p95 if res.impact_score_p95 is not None else s
         
-    # Determine confidence: min of inputs?
-    # If any input is Low, composite is Low?
-    # Let's take the confidence of the driver (max score)
-    driver_name = max(scores, key=scores.get) if scores else None
-    overall_confidence = ConfidenceLevel.LOW
-    if driver_name:
-         overall_confidence = results[driver_name].hazard.confidence
+        p5_weighted_sum += p5 * w
+        p95_weighted_sum += p95 * w
+        
+    # Compute weighted averages
+    composite_score = weighted_sum / total_weight if total_weight > 0 else 0.0
+    comp_p5 = p5_weighted_sum / total_weight if total_weight > 0 else 0.0
+    comp_p95 = p95_weighted_sum / total_weight if total_weight > 0 else 0.0
 
-    # H3: Aggregated Uncertainty
-    # For Max-Aggregation, the composite range should reflect the range of the dominant hazard(s)
-    # Simple approach: Max of p95s and Max (or Min) of p5s?
-    # Conservative: max(p95) is the worst case. max(p5) is the best case of the worst driver?
-    # Let's use:
-    # composite_p95 = max(individual_p95s) -> The worst plausible outcome
-    # composite_p5 = max(individual_p5s) -> The best plausible outcome of the drivers
-    
-    comp_p5 = max(p5_values) if p5_values else 0.0
-    comp_p95 = max(p95_values) if p95_values else 0.0
-         
+    # Determine confidence: lowest confidence of any driver?
+    # Or weighted average? Confidence is categorical.
+    # Let's take the confidence of the hazard with the highest weight * score contribution?
+    # Simple approach: Min confidence (conservative)
+    overall_confidence = ConfidenceLevel.LOW
+    if confidences:
+        # Map to int, take min, map back?
+        # Creating a simple map for now
+        conf_map = {
+            ConfidenceLevel.LOW: 1,
+            ConfidenceLevel.MODERATE: 2,
+            ConfidenceLevel.HIGH: 3
+        }
+        min_val = min(conf_map.get(c, 1) for c in confidences)
+        rev_map = {1: ConfidenceLevel.LOW, 2: ConfidenceLevel.MODERATE, 3: ConfidenceLevel.HIGH}
+        overall_confidence = rev_map.get(min_val, ConfidenceLevel.LOW)
+
     return CompositeRiskResult(
         event_type=event_type,
-        composite_score=max_score,
-        composite_tier=_score_to_tier(max_score),
+        composite_score=composite_score,
+        composite_tier=_score_to_tier(composite_score),
         confidence=overall_confidence,
         hazard_scores=scores,
         weights_used=weights,

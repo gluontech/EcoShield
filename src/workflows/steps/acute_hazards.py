@@ -78,7 +78,7 @@ async def assess_acute_hazards_step(data: Dict[str, Any]) -> Dict[str, Any]:
                 HazardType.RIVERINE_FLOOD.value,
                 assess_riverine_flood(
                     lat=lat, lon=lon, return_period=rp, 
-                    time_horizon=horizon, surface=surface, city=city
+                    surface=surface, city=city
                 )
             ))
             
@@ -87,7 +87,7 @@ async def assess_acute_hazards_step(data: Dict[str, Any]) -> Dict[str, Any]:
                 HazardType.PLUVIAL_FLOOD.value,
                 assess_pluvial_flood(
                     lat=lat, lon=lon, return_period=rp, 
-                    time_horizon=horizon, surface=surface, city=city
+                    scenario=scenario
                 )
             ))
             
@@ -96,7 +96,7 @@ async def assess_acute_hazards_step(data: Dict[str, Any]) -> Dict[str, Any]:
                 HazardType.LANDSLIDE.value,
                 assess_landslide(
                     lat=lat, lon=lon, return_period=rp, 
-                    time_horizon=horizon
+                    scenario=scenario
                 )
             ))
             

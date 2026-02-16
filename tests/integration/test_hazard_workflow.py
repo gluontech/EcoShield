@@ -41,7 +41,10 @@ async def test_hazard_workflow_end_to_end():
         chronic_hazard_details={},
         surface_adjustments=SurfaceAdjustments(
             original_elevation_m=0, subsidence_applied_m=0, slr_applied_m=0, adjusted_elevation_m=0
-        )
+        ),
+        return_period=100,
+        time_horizon=2050,
+        scenario="ssp245"
     )
     
     # Save original executors

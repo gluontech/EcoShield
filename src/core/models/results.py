@@ -47,6 +47,12 @@ class HazardAssessmentResult(BaseModel):
         le=100,
         description="Impact score (0-100)"
     )
+    impact_score_p5: Optional[float] = Field(
+        None, ge=0, le=100, description="Score at 5th percentile intensity (uncertainty lower bound)"
+    )
+    impact_score_p95: Optional[float] = Field(
+        None, ge=0, le=100, description="Score at 95th percentile intensity (uncertainty upper bound)"
+    )
     impact_tier: RiskTier = Field(default=RiskTier.LOW, description="Risk tier")
 
     # Validation (Gap 2.1)

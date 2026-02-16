@@ -52,9 +52,12 @@ class AdjustedSurface(BaseModel):
         self._slr_applied = True
 
     def getEffectiveFloodDepth(self, waterLevelM: float) -> float:
-        """Calculate flood depth with all adjustments."""
+        """
+        Calculate flood depth considering SLR and subsidence.
+        waterLevelM: Water level relative to original datum (without SLR).
+        """
         adjustedWater = waterLevelM + self.slr_adjustment_m
-        return max(0, adjustedWater - self.adjusted_elevation_m)
+        return max(0, adjustedWater - self.subsidence_adjusted_elevation_m)
 
     @property
     def subsidenceApplied(self) -> bool:
@@ -148,8 +151,6 @@ class BuildingAdjustedSurface(BaseModel):
         if self._slr_applied:
             raise ValueError("SLR already applied to this building surface")
         self.slr_m = slr_m
-        self.slr_scenario = scenario
-        self.slr_year = year
         self.slr_scenario = scenario
         self.slr_year = year
         self._slr_applied = True
