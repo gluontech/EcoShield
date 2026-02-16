@@ -1,0 +1,103 @@
+
+# src/config/hazard_weights.yaml
+# City-specific hazard weights for composite scoring.
+# Acute and chronic weights must each sum to 1.0 within their group.
+# v3.2 (Gap M): pluvial_flood added to all cities with urban flooding.
+# Existing acute weights rebalanced to accommodate pluvial_flood.
+#
+# v3.2 subsidence policy (evidence-based):
+#   Chronic subsidence only included for cities with confirmed severe,
+#   ongoing, unmitigated subsidence (peer-reviewed InSAR evidence):
+#     ✅ HCMC (up to 80 mm/yr), Jakarta (up to 250 mm/yr), Manila (up to 109 mm/yr)
+#     ❌ Hanoi — diminishing central; localized peri-urban (Nguyen et al. 2022)
+#     ❌ Bangkok — mitigated inner city ~0-1 cm/yr (Phien-wej et al. 2006)
+#     ❌ Da Nang, Singapore — no significant subsidence
+
+# ── Vietnam (MVP) ──
+
+hcmc:
+  acute:
+    riverine_flood: 0.25    # Mekong Delta, frequent urban flooding
+    coastal_flood: 0.20     # Low-lying coastal, high SLR exposure
+    storm_surge: 0.15       # Typhoon surge + funnel geography
+    tropical_cyclone: 0.10  # Moderate direct cyclone exposure
+    landslide: 0.05         # Mostly flat, minimal slope risk
+    pluvial_flood: 0.25     # v3.2: Dominant flood type, 20-30+ events/yr
+  chronic:
+    subsidence: 0.65        # Severe: up to 80mm/yr District 7 (World Bank 2015)
+    urban_heat: 0.35        # Tropical, high UHI
+
+hanoi:
+  acute:
+    riverine_flood: 0.30    # Red River flood exposure
+    tropical_cyclone: 0.20  # Northern VN typhoon corridor
+    landslide: 0.20         # Surrounding hills/mountains
+    pluvial_flood: 0.30     # v3.2: Frequent monsoon surface flooding
+  chronic:
+    urban_heat: 1.00        # v3.2: Subsidence removed — central Hanoi diminishing,
+                            # localized peri-urban hotspots only (Nguyen et al. 2022)
+
+danang:
+  acute:
+    riverine_flood: 0.20    # Han River + mountain runoff
+    coastal_flood: 0.15     # Exposed coastline
+    storm_surge: 0.15       # Direct typhoon path
+    tropical_cyclone: 0.15  # Central VN typhoon corridor
+    landslide: 0.10         # Hai Van pass terrain
+    pluvial_flood: 0.25     # v3.2: Monsoon intensity events
+  chronic:
+    urban_heat: 1.00        # No significant subsidence
+
+# ── Indonesia ──
+
+jakarta:
+  acute:
+    riverine_flood: 0.25    # Ciliwung River, extreme urban flooding
+    coastal_flood: 0.20     # North Jakarta sinking below sea level
+    storm_surge: 0.15       # Java Sea surge potential
+    landslide: 0.10         # Southern hills/Bogor
+    pluvial_flood: 0.30     # v3.2: Most frequent hazard — drainage overwhelmed
+  chronic:
+    subsidence: 0.70        # World's most severe: up to 250mm/yr North Jakarta
+                            # (Frontiers in Earth Science 2024). Capital relocation
+                            # to Nusantara partly driven by subsidence.
+    urban_heat: 0.30        # Tropical, dense urban
+
+# ── Philippines ──
+
+manila:
+  acute:
+    riverine_flood: 0.20    # Pasig River + Marikina
+    coastal_flood: 0.15     # Manila Bay exposure
+    storm_surge: 0.15       # Typhoon surge (Super Typhoon Haiyan class)
+    tropical_cyclone: 0.20  # Highest cyclone exposure in SEA
+    landslide: 0.05         # Marikina Valley slopes
+    pluvial_flood: 0.25     # v3.2: Habagat monsoon surface flooding
+  chronic:
+    subsidence: 0.55        # Severe: max 109 mm/yr Bulacan, 20-42 mm/yr
+                            # Metro Manila (Sulapas et al. 2024). Groundwater
+                            # over-extraction ongoing; no effective mitigation.
+    urban_heat: 0.45        # Dense urban, tropical
+
+# ── Thailand ──
+
+bangkok:
+  acute:
+    riverine_flood: 0.30    # Chao Phraya, 2011 megaflood precedent
+    coastal_flood: 0.20     # Gulf of Thailand, very low-lying
+    storm_surge: 0.20       # Funnel geography in Gulf
+    pluvial_flood: 0.30     # v3.2: Annual monsoon flooding (June-Oct)
+  chronic:
+    urban_heat: 1.00        # v3.2: Subsidence removed — inner Bangkok mitigated
+                            # to ~0-1 cm/yr via strict groundwater regulation
+                            # (Phien-wej et al. 2006; Mekong-US Partnership 2020)
+
+# ── Singapore ──
+
+singapore:
+  acute:
+    coastal_flood: 0.35     # Island nation, SLR existential threat
+    storm_surge: 0.30       # Strait of Malacca surge
+    pluvial_flood: 0.35     # v3.2: Flash floods from intense convective storms
+  chronic:
+    urban_heat: 1.00        # Dense urban, near-equatorial, no subsidence

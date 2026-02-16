@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-**EcoShield** is a **structure-level** climate risk intelligence Web SaaS platform for Southeast Asia. The platform delivers engineering-based climate risk analysis focused on **physical asset vulnerability and hazard exposure** at the individual building level. It models **8 hazards** specific to SEA cities — coastal, riverine, and **pluvial** flooding, subsidence, landslides, tropical cyclones, storm surge, and urban heat — using **Agno Workflows** for deterministic orchestration. MVP targets: **Ho Chi Minh City, Hanoi, Da Nang** (Vietnam).
+**EcoShield** is a **structure-level** climate risk intelligence Web SaaS platform for Southeast Asia. The platform delivers engineering-based climate risk analysis focused on **physical asset vulnerability and hazard exposure** at the individual building level. It models **8 hazards** specific to SEA cities — coastal, riverine, and **pluvial** flooding, subsidence, landslides, tropical cyclones, storm surge, and urban heat — using a **Custom AsyncIO Pipeline** for deterministic orchestration. MVP targets: **Ho Chi Minh City, Hanoi, Da Nang** (Vietnam).
 
 > **Resolution Transparency (v3.2):** Climate forcing comes from NEX-GDDP-CMIP6 at **0.25° (~25 km)**. Building-level differentiation within each 625 km² climate grid cell is achieved by overlaying terrain data (GLO-30 DEM at 30 m, HAND at 30 m, Landsat LST at 30 m) onto sub-meter building footprints. Climate projections (temperature change, precipitation change) are **uniform** within each grid cell. Every `HazardIntensity` output now carries a `climate_forcing_resolution_m` field for downstream consumers to assess granularity.
 
@@ -11,6 +11,7 @@
 v3.2 extends v3.1 with **critical methodological and code fixes** identified via cross-analysis:
 
 - **Multi-return-period EAL integration** — EAL is now computed via trapezoidal integration over the full loss-exceedance curve (RPs 2, 5, 10, 25, 50, 100, 250, 500, 1000), not a single scenario loss. (Gap Q)
+- **Deterministic Pipeline** — Custom `AsyncPipeline` orchestrates hazard tools without external framework dependencies. (Gap V)
 - **Discharge → depth conversion** — Manning's equation rating curve converts GloFAS discharge (m³/s) to water level (m) for riverine flood depth calculation. (Gap J)
 - **Real ensemble uncertainty** — Multi-model spread from 5 GCMs replaces fabricated `change × 0.7/1.3` bounds. (Gap I)
 - **Pluvial flood model** — Surface water flooding from intense rainfall, the most frequent flood type in SEA cities, is now modeled. (Gap M)
@@ -28,8 +29,8 @@ The core output is **H×E×V per building**: Hazard intensity × Exposure (build
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| **Orchestration** | Agno Workflows | Deterministic execution, dependency ordering, parallel hazards |
-| **Agent Pattern** | Team + Specialized Agents | ClimateTeam coordinates ClimateAgent + HazardAgents |
+| **Orchestration** | Custom AsyncIO Pipeline | Lightweight deterministic execution, no framework overhead |
+| **Agent Pattern** | Specialized Tools | API Layer coordinates Pipeline + Tools directly |
 | **API Version** | `/v1/` | Clean start, no legacy conflicts |
 | **Tool Naming** | `{hazard}_tools.py` | Consistent: `riverine_flood_tools.py` |
 | **Function Naming** | `assess_{hazard}()` | Consistent: `assess_riverine_flood()` |
@@ -85,9 +86,9 @@ The core output is **H×E×V per building**: Hazard intensity × Exposure (build
 │                                     ▼                                        │
 │  ┌────────────────────────────────────────────────────────────────────────┐  │
 │  │                       WORKFLOW LAYER                                    │  │
-│  │                   (Agno Workflow Orchestration)                         │  │
+│  │                   (Custom AsyncIO Pipeline)                             │  │
 │  │  ┌──────────────────────────────────────────────────────────────────┐  │  │
-│  │  │              HazardAssessmentWorkflow                             │  │  │
+│  │  │              HazardAssessmentPipeline                             │  │  │
 │  │  │  ┌────────────────────────────────────────────────────────────┐  │  │  │
 │  │  │  │ Step 0: Asset Fetch (NEW v3.1)                             │  │  │  │
 │  │  │  │   └── fetch_buildings() → BuildingCluster + elevations     │  │  │  │
@@ -112,17 +113,7 @@ The core output is **H×E×V per building**: Hazard intensity × Exposure (build
 │  │  │  │ Step 5: Composite Risk Calculation                         │  │  │  │
 │  │  │  │   └── aggregate → PortfolioRiskSummary / FullRiskProfile   │  │  │  │
 │  │  │  └────────────────────────────────────────────────────────────┘  │  │  │
-│  │  └──────────────────────────────────────────────────────────────────┘  │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-│                                     │                                        │
-│                                     ▼                                        │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                          AGENT LAYER                                   │  │
-│  │                     (Agno Agents + DeepSeek LLM)                       │  │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                 │  │
-│  │  │ ClimateAgent │  │ HazardAgent  │  │ ReportAgent  │                 │  │
-│  │  │ (NEX-GDDP)  │  │  (8 Tools)   │  │  (Synthesis) │                 │  │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘                 │  │
+│  └──────────────────────────────────────────────────────────────────┘  │  │
 │  └────────────────────────────────────────────────────────────────────────┘  │
 │                                     │                                        │
 │                                     ▼                                        │
@@ -267,9 +258,8 @@ The core output is **H×E×V per building**: Hazard intensity × Exposure (build
 |-------|------------|---------|-------|
 | **Frontend** | Next.js + React | 14.x | Static + SSR |
 | **API** | FastAPI | 0.111+ | Async, Pydantic v2 |
-| **Orchestration** | Agno Workflows | 1.0+ | Deterministic pipelines |
-| **Agents** | Agno Agents | 1.0+ | Tool-equipped agents |
-| **LLM** | DeepSeek Chat | — | Via Agno provider |
+| **Orchestration** | Custom AsyncIO Pipeline | 1.0+ | Deterministic pipelines |
+| **LLM** | DeepSeek Chat | — | Via standard HTTP client |
 | **Database** | PostgreSQL + PostGIS | 16+ | Spatial queries + cached data |
 | **Cache** | Redis | 7+ | Session state + API response cache |
 | **Object Storage** | S3-compatible (MinIO) | — | NetCDF, COG tiles |
@@ -306,7 +296,6 @@ dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
     "pydantic>=2.7",
-    "agno>=1.0",
     "celery>=5.3",
     # Database
     "sqlalchemy>=2.0",
@@ -389,8 +378,9 @@ ecoshield/
 │   │   ├── urban_heat_tools.py       # Landsat LST + ERA5 WBGT + NEX-GDDP
 │   │   └── structure_risk_tools.py   # H×E×V per building, multi-RP EAL — FIX v3.2 (Gap Q)
 │   │
-│   ├── workflows/                    # Phase 4: Agno Workflows
+│   ├── workflows/                    # Phase 4: AsyncIO Pipelines (Wait, no, custom pipeline infrastructure)
 │   │   ├── __init__.py
+│   │   ├── pipeline.py               # Custom Pipeline Executor (NEW v3.2 Gap V)
 │   │   ├── hazard_workflow.py        # Main 6-step workflow (was 4-step, v3.1)
 │   │   ├── portfolio_workflow.py     # Batch portfolio
 │   │   └── steps/
@@ -574,7 +564,7 @@ The workflow enforces this execution order, ensuring subsidence results feed int
 | **Phase 1** | `ECOSHIELD-PHASE1-MODELS-v3.md` | Core Pydantic models + asset models | 20+ model classes, DataSource (14 sources), HazardType (8 incl. PLUVIAL_FLOOD), BuildingMaterial, VulnerabilityClass, StructureRiskResult (multi-RP EAL), BuildingAdjustedSurface, OccupancyValueMultiplier |
 | **Phase 2** | `ECOSHIELD-PHASE2-DATA-v3.md` | Data access layer (API-first + asset) | 14 data modules + 5 ingestion pipelines + `rating_curve.py` + `ipcc_slr.py` + `validation.py` + published subsidence fallback |
 | **Phase 3** | `ECOSHIELD-PHASE3-TOOLS-v3.md` | Hazard + structure risk tools | 8 hazard tools (incl. pluvial_flood) + structure_risk_tools (multi-RP H×E×V) + Holland (2008) wind field |
-| **Phase 4** | `ECOSHIELD-PHASE4-WORKFLOW-v3.md` | Agno workflow orchestration | 6-step workflow (asset fetch → chronic → cyclone → acute [5 hazards] → structure risk → composite) |
+| **Phase 4** | `ECOSHIELD-PHASE4-WORKFLOW-v3.md` | Custom AsyncIO orchestration | 6-step workflow (asset fetch → chronic → cyclone → acute [5 hazards] → structure risk → composite) |
 | **Phase 5** | `ECOSHIELD-PHASE5-API-v3.md` | API integration | FastAPI routes + building assessment endpoint + auth + rate limiting |
 
 ---
@@ -723,8 +713,7 @@ curl -X POST http://localhost:8000/v1/buildings/assess \
 12. **Google Open Buildings 2.5D Temporal**: GEE `GOOGLE/Research/open-buildings-temporal/v1` — Building heights 2016-2023 (**NEW v3.1**)
 13. **Overture Maps Buildings**: https://overturemaps.org/ — S3 `s3://overturemaps-us-west-2/release/`, CDLA Permissive v2 (**NEW v3.1**)
 14. **JRC Global Flood Depth-Damage**: Huizinga, J. et al. (2017). *Global flood depth-damage functions*. JRC105688. https://publications.jrc.ec.europa.eu/repository/handle/JRC105688 (**NEW v3.1**)
-15. **Agno**: https://docs.agno.com/
-16. **DeepSeek**: https://platform.deepseek.com/
+15. **DeepSeek**: https://platform.deepseek.com/
 17. **Meteomatics Weather API** (evaluated, optional): https://www.meteomatics.com/en/api/getting-started/ — See `ECOSHIELD-METEOMATICS-ANALYSIS.md`
 
 ---
