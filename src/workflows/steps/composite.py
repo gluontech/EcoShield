@@ -9,6 +9,7 @@ from src.core.models.composite import (
 from src.core.models.geometry import Location
 from src.core.models.results import HazardAssessmentResult, PortfolioRiskSummary
 from src.core.models.enums import RiskTier, ConfidenceLevel
+from src.config.hazard_weights import HAZARD_WEIGHTS, load_city_weights
 
 logger = logging.getLogger(__name__)
 
@@ -66,25 +67,26 @@ async def calculate_composite_step(data: Dict[str, Any]) -> Dict[str, Any]:
         acute_results["tropical_cyclone"] = data["cyclone_result"]
 
     # 3. Compute Composite Scores
-    # Weights for aggregation (v3.2 methodology)
-    # Acute: Max of Flood/Surge/Pluvial + Cyclone + Landslide?
-    # Or just weighted sum?
-    # Let's use a simple Max-Aggregation for MVP to avoid dilution.
-    # Actually, FullRiskProfile methodology says "Weighted sum".
-    # Let's implement a simplified aggregation: Max score determines tier, but we sum components.
+    # Use hazard_weights.yaml (M1)
     
-    acute_composite = _aggregate_risks(acute_results, "acute", city)
-    chronic_composite = _aggregate_risks(chronic_results, "chronic", city)
+    city_weights = load_city_weights(city)
+    acute_weights = city_weights.get("acute", {})
+    chronic_weights = city_weights.get("chronic", {})
+    
+    acute_composite = _aggregate_risks(acute_results, "acute", city, acute_weights)
+    chronic_composite = _aggregate_risks(chronic_results, "chronic", city, chronic_weights)
     
     # 4. Surface Adjustments
     surface_adj = SurfaceAdjustments(
         original_elevation_m=adj_surface.original_elevation_m if adj_surface else 0.0,
         subsidence_applied_m=adj_surface.subsidence_adjustment_m if adj_surface else 0.0,
         slr_applied_m=adj_surface.slr_adjustment_m if adj_surface else 0.0,
-        adjusted_elevation_m=adj_surface.adjusted_elevation_m if adj_surface else 0.0
+        adjusted_elevation_m=adj_surface.subsidence_adjusted_elevation_m if adj_surface else 0.0
     )
     
     # 5. Create FullRiskProfile
+    # 5. Create FullRiskProfile
+    # v3.2: Methodology tracking + Portfolio EAL (Gap Q)
     profile = FullRiskProfile(
         location=Location(lat=lat, lon=lon),
         city=city,
@@ -96,7 +98,21 @@ async def calculate_composite_step(data: Dict[str, Any]) -> Dict[str, Any]:
         acute_hazard_details=acute_results,
         chronic_hazard_details=chronic_results,
         
-        surface_adjustments=surface_adj
+        surface_adjustments=surface_adj,
+        
+        return_period=primary_rp,
+        time_horizon=data.get("time_horizon", 2050),
+        scenario=data.get("slr_scenario", "ssp245"),
+        
+        methodology={
+            "version": "3.2",
+            "orchestration": "AsyncIO Pipeline",
+            "acute_aggregation": "Max score (MVP)",
+            "chronic_aggregation": "Max score (MVP)",
+            "composite_logic": "Separated Acute/Chronic (No cross-aggregation)"
+        },
+        
+        portfolio_eal_usd=data.get("portfolio_summary", {}).get("total_expected_annual_loss_usd") if data.get("portfolio_summary") else None
     )
     
     data["output"] = profile
@@ -107,7 +123,8 @@ async def calculate_composite_step(data: Dict[str, Any]) -> Dict[str, Any]:
 def _aggregate_risks(
     results: Dict[str, HazardAssessmentResult],
     event_type: str,
-    city: str
+    city: str,
+    weight_map: Dict[str, float]
 ) -> CompositeRiskResult:
     """Aggregate individual hazard results into a composite score."""
     
@@ -130,19 +147,29 @@ def _aggregate_risks(
     total_score = 0.0
     max_score = 0.0
     
-    # Simple aggregation: Max Score (conservative)
-    # Why Max? Because if you flood 2m, it doesn't matter if it's hot.
-    # For chronic, if you sink 10cm/yr, heat is additive?
-    # Let's use Max for now as it's safe.
+    # Uncertainty Tracking (Fix H3)
+    p5_values = []
+    p95_values = []
     
     confidences = []
     
     for name, res in results.items():
         s = res.impact_score
         scores[name] = s
-        weights[name] = 1.0 # Equal weight / Max logic
+        
+        # M1: Use configured weight or default to 1.0
+        w = weight_map.get(name, 1.0)
+        weights[name] = w
+        
         max_score = max(max_score, s)
         confidences.append(res.hazard.confidence)
+        
+        # H3: Track real uncertainty bounds
+        # If tool didn't provide range, use score +/- 0 (conservative)
+        p5 = res.impact_score_p5 if hasattr(res, 'impact_score_p5') and res.impact_score_p5 is not None else s
+        p95 = res.impact_score_p95 if hasattr(res, 'impact_score_p95') and res.impact_score_p95 is not None else s
+        p5_values.append(p5)
+        p95_values.append(p95)
         
     # Determine confidence: min of inputs?
     # If any input is Low, composite is Low?
@@ -151,6 +178,17 @@ def _aggregate_risks(
     overall_confidence = ConfidenceLevel.LOW
     if driver_name:
          overall_confidence = results[driver_name].hazard.confidence
+
+    # H3: Aggregated Uncertainty
+    # For Max-Aggregation, the composite range should reflect the range of the dominant hazard(s)
+    # Simple approach: Max of p95s and Max (or Min) of p5s?
+    # Conservative: max(p95) is the worst case. max(p5) is the best case of the worst driver?
+    # Let's use:
+    # composite_p95 = max(individual_p95s) -> The worst plausible outcome
+    # composite_p5 = max(individual_p5s) -> The best plausible outcome of the drivers
+    
+    comp_p5 = max(p5_values) if p5_values else 0.0
+    comp_p95 = max(p95_values) if p95_values else 0.0
          
     return CompositeRiskResult(
         event_type=event_type,
@@ -159,8 +197,8 @@ def _aggregate_risks(
         confidence=overall_confidence,
         hazard_scores=scores,
         weights_used=weights,
-        composite_p5=max_score * 0.8, # Mock uncertainty
-        composite_p95=min(100.0, max_score * 1.2),
+        composite_p5=comp_p5,
+        composite_p95=comp_p95,
         city=city,
         aggregation_valid=True
     )

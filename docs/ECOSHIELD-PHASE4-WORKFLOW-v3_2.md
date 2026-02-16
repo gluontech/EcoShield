@@ -46,7 +46,6 @@ src/workflows/
 ├── __init__.py
 ├── pipeline.py                 # Core Pipeline & PipelineStep classes (NEW v3.2)
 ├── hazard_workflow.py          # Main 6-step workflow (uses Pipeline class)
-├── portfolio_workflow.py       # Batch portfolio (parallel sites + EAL aggregation)
 └── steps/
     ├── __init__.py
     ├── asset_fetch.py          # Step 0: Buildings + BuildingAdjustedSurface (FIX v3.2 Gap S)

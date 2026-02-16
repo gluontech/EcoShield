@@ -3,6 +3,7 @@ import asyncio
 import logging
 from typing import Dict, Any, List
 
+from src.core.models import HazardType
 from src.tools.storm_surge_tools import assess_storm_surge
 from src.tools.coastal_flood_tools import assess_coastal_flood
 from src.tools.riverine_flood_tools import assess_riverine_flood
@@ -47,36 +48,69 @@ async def assess_acute_hazards_step(data: Dict[str, Any]) -> Dict[str, Any]:
     # That's fine for asyncio.
     
     async def _assess_rp(rp: int) -> tuple[int, Dict[str, Any]]:
-        # Tasks for this RP
-        t_surge = assess_storm_surge(
-            lat=lat, lon=lon, cyclone_params=cyclone_params, 
-            surface=surface, return_period=rp
-        )
-        t_coastal = assess_coastal_flood(
-            lat=lat, lon=lon, time_horizon=horizon, 
-            scenario=scenario, surface=surface, city=city
-        )
-        t_riverine = assess_riverine_flood(
-            lat=lat, lon=lon, return_period=rp, 
-            surface=surface, scenario=scenario, city=city
-        )
-        t_pluvial = assess_pluvial_flood(
-            lat=lat, lon=lon, return_period=rp, scenario=scenario
-        )
-        t_landslide = assess_landslide(
-            lat=lat, lon=lon, return_period=rp, scenario=scenario
-        )
+        # Determine active hazards from config (M2)
+        active_hazards = data.get("hazard_config", {}).get("acute", [])
+        
+        # Map active hazards to assessment functions and HazardType keys
+        # This keeps the order consistent
+        task_map = []
+        
+        if "storm_surge" in active_hazards:
+            task_map.append((
+                HazardType.STORM_SURGE.value,
+                assess_storm_surge(
+                    lat=lat, lon=lon, cyclone_params=cyclone_params, 
+                    surface=surface, return_period=rp
+                )
+            ))
+            
+        if "coastal_flood" in active_hazards:
+            task_map.append((
+                HazardType.COASTAL_FLOOD.value,
+                assess_coastal_flood(
+                    lat=lat, lon=lon, time_horizon=horizon, 
+                    scenario=scenario, surface=surface, city=city, return_period=rp
+                )
+            ))
+            
+        if "riverine_flood" in active_hazards:
+            task_map.append((
+                HazardType.RIVERINE_FLOOD.value,
+                assess_riverine_flood(
+                    lat=lat, lon=lon, return_period=rp, 
+                    time_horizon=horizon, surface=surface, city=city
+                )
+            ))
+            
+        if "pluvial_flood" in active_hazards:
+            task_map.append((
+                HazardType.PLUVIAL_FLOOD.value,
+                assess_pluvial_flood(
+                    lat=lat, lon=lon, return_period=rp, 
+                    time_horizon=horizon, surface=surface, city=city
+                )
+            ))
+            
+        if "landslide" in active_hazards:
+            task_map.append((
+                HazardType.LANDSLIDE.value,
+                assess_landslide(
+                    lat=lat, lon=lon, return_period=rp, 
+                    time_horizon=horizon
+                )
+            ))
+            
+        if not task_map:
+            return rp, {}
+
+        # Extract tasks
+        keys = [item[0] for item in task_map]
+        tasks = [item[1] for item in task_map]
         
         # Gather results for this RP
-        results = await asyncio.gather(
-            t_surge, t_coastal, t_riverine, t_pluvial, t_landslide,
-            return_exceptions=True
-        )
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         
         rp_map = {}
-        # Map back to hazard keys
-        # Order: surge, coastal, riverine, pluvial, landslide
-        keys = ["storm_surge", "coastal_flood", "riverine_flood", "pluvial_flood", "landslide"]
         
         for k, res in zip(keys, results):
             if isinstance(res, Exception):

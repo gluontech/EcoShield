@@ -33,8 +33,8 @@ class AdjustedSurface(BaseModel):
 
     @computed_field
     @property
-    def adjusted_elevation_m(self) -> float:
-        """Ground elevation after subsidence."""
+    def subsidence_adjusted_elevation_m(self) -> float:
+        """Ground elevation after subsidence (excludes SLR)."""
         return self.original_elevation_m - self.subsidence_adjustment_m
 
     def applySubsidence(self, cumulativeM: float) -> None:
@@ -150,6 +150,13 @@ class BuildingAdjustedSurface(BaseModel):
         self.slr_m = slr_m
         self.slr_scenario = scenario
         self.slr_year = year
+        self.slr_scenario = scenario
+        self.slr_year = year
         self._slr_applied = True
+    
+    @property
+    def subsidence_applied(self) -> bool:
+        """Check if subsidence has been applied."""
+        return self._subsidence_applied
 
     model_config = {"arbitrary_types_allowed": True}

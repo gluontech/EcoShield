@@ -1,7 +1,7 @@
 
-import asyncio
 import logging
 from typing import Dict, Any
+from datetime import datetime
 
 from src.tools.subsidence_tools import assess_subsidence
 from src.tools.urban_heat_tools import assess_urban_heat
@@ -33,32 +33,43 @@ async def assess_chronic_hazards_step(data: Dict[str, Any]) -> Dict[str, Any]:
     
     logger.info(f"Assessing chronic hazards for {city}...")
     
-    # Run assessments in parallel
-    subsidence_task = assess_subsidence(
-        lat=lat, lon=lon, city=city, time_horizon=horizon
-    )
-    heat_task = assess_urban_heat(
-        lat=lat, lon=lon, time_horizon=horizon, scenario=data.get("slr_scenario", "ssp245")
-    )
     
-    results = await asyncio.gather(subsidence_task, heat_task, return_exceptions=True)
+    chronic_config = data.get("hazard_config", {}).get("chronic", [])
+    
+    # Run assessments in parallel if enabled
+    tasks = []
+    task_names = []
+    
+    if "subsidence" in chronic_config:
+        tasks.append(assess_subsidence(
+            lat=lat, lon=lon, city=city, time_horizon=horizon
+        ))
+        task_names.append("subsidence")
+    
+    if "urban_heat" in chronic_config:
+        tasks.append(assess_urban_heat(
+            lat=lat, lon=lon, time_horizon=horizon, scenario=data.get("slr_scenario", "ssp245")
+        ))
+        task_names.append("urban_heat")
+        
+    if not tasks:
+        logger.info("No chronic hazards enabled for this city.")
+        results = []
+    else:
+        results = await asyncio.gather(*tasks, return_exceptions=True)
     
     chronic_results = {}
     subsidence_result = None
     
-    # Process Subsidence
-    if isinstance(results[0], Exception):
-        logger.error(f"Subsidence assessment failed: {results[0]}")
-    else:
-        subsidence_result = results[0]
-        chronic_results["subsidence"] = subsidence_result
-        
-    # Process Urban Heat
-    if isinstance(results[1], Exception):
-        logger.error(f"Urban Heat assessment failed: {results[1]}")
-    else:
-        chronic_results["urban_heat"] = results[1]
-        
+    for i, name in enumerate(task_names):
+        res = results[i]
+        if isinstance(res, Exception):
+            logger.error(f"{name} assessment failed: {res}")
+        else:
+            chronic_results[name] = res
+            if name == "subsidence":
+                subsidence_result = res
+                
     data["chronic_results"] = chronic_results
     
     # ── Update Surfaces (Gap S) ──
@@ -96,11 +107,12 @@ async def assess_chronic_hazards_step(data: Dict[str, Any]) -> Dict[str, Any]:
         
         rate_mm_yr = subsidence_result.intermediate.get("velocity_mm_yr", 0.0)
         source = subsidence_result.intermediate.get("subsidence_source", "none")
-        years = max(0, horizon - 2024)
+        current_year = datetime.now().year
+        years = max(0, horizon - current_year)
         
         building_surfaces = data.get("building_surfaces", {})
         for bid, surf in building_surfaces.items():
-            if not surf._subsidence_applied:
+            if not surf.subsidence_applied:
                 surf.apply_subsidence(rate_mm_yr, horizon_years=years)
                 # Also track source
                 surf.subsidence_source = source
