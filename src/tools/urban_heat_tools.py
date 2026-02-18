@@ -170,7 +170,7 @@ def _calculate_heat_risk_score(temp: float, hw_change: int) -> float:
         base = 45 + (temp - 35) / 5 * 30
     else:
         base = min(100, 75 + (temp - 40) / 5 * 25)
-    return min(100, base + min(15, hw_change * 0.5))
+    return max(0.0, min(100.0, base + min(15.0, hw_change * 0.5)))
 
 
 def _score_to_tier(score: float) -> RiskTier:

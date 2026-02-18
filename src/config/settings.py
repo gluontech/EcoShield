@@ -61,6 +61,21 @@ class Settings(BaseSettings):
     
     NASA_EARTHDATA_TOKEN: Optional[str] = None
 
+    # --- Database (PostgreSQL) ---
+    POSTGRES_USER: str = "ecoshield"
+    POSTGRES_PASSWORD: str = "password"
+    POSTGRES_DB: str = "ecoshield"
+    POSTGRES_HOST: str = "db"
+    POSTGRES_PORT: int = 5432
+
+    @computed_field
+    def DATABASE_URL(self) -> str:
+        """Construct PostgreSQL connection string."""
+        return (
+            f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+
     # --- AWS S3 Buckets (Public) ---
     NEX_GDDP_S3_BUCKET: str = "nex-gddp-cmip6"
     COPERNICUS_DEM_S3_BUCKET: str = "copernicus-dem-30m"

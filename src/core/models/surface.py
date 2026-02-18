@@ -65,6 +65,11 @@ class AdjustedSurface(BaseModel):
         return self._subsidence_applied
 
     @property
+    def subsidence_applied(self) -> bool:
+        """Alias for subsidenceApplied (snake_case compatibility)."""
+        return self._subsidence_applied
+
+    @property
     def slr_applied(self) -> bool:
         """Check if SLR has been applied."""
         return self._slr_applied

@@ -26,6 +26,8 @@ dependencies = [
     "cdsapi>=0.7.7",
     "earthengine-api>=1.7.13",
     "netcdf4>=1.7.3",
+    "pydantic-settings>=2.2.0",
+    "pyyaml>=6.0.1",
 ]
 
 [project.optional-dependencies]

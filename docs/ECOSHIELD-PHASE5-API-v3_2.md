@@ -1,8 +1,8 @@
-# EcoShield Phase 5: API Layer — v3.2
+# EcoShield Phase 5: API Layer
 
 ## Implementation Guide for Cursor AI
 
-> **Phase 5 v3.2**: Expose hazard assessment capabilities as a RESTful API
+> **Phase 5**: Expose hazard assessment capabilities as a RESTful API
 > using FastAPI.  All **eight** hazard workflows from Phase 4 are accessible via
 > standardised endpoints.
 > **v3.1**: Structure-level building assessment endpoint (`POST /v1/buildings/assess`)
@@ -48,7 +48,7 @@ src/api/
 │   └── responses.py     # Pydantic response models (v3.2: + losses_by_return_period, portfolio_eal_usd)
 ├── middleware/
 │   ├── __init__.py
-│   ├── auth.py          # API key authentication
+│   ├── auth.py          # OIDC OAuth2 Authentication & Authorization
 │   └── rate_limit.py    # Token-bucket rate limiting
 └── errors.py            # Structured error responses
 ```
@@ -107,7 +107,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="EcoShield Climate Risk API",
+    title="EcoShield Climate Intelligence API",
     description=(
         "Multi-hazard climate risk assessment for Southeast Asia. "
         "Covers flood, heat stress, cyclone, storm surge, subsidence, "
@@ -115,21 +115,21 @@ app = FastAPI(
         "EAL via trapezoidal integration, per-building loss curves, "
         "pluvial flood (8th hazard), occupancy-scaled replacement values."
     ),
-    version="3.2.0",
+    version="1.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
 )
 
 # ── Middleware ───────────────────────────────────────────
-app.add_middleware(
+""" app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS if hasattr(settings, "CORS_ORIGINS") else ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 app.add_middleware(APIKeyMiddleware)
-app.add_middleware(RateLimitMiddleware, requests_per_minute=60)
+app.add_middleware(RateLimitMiddleware, requests_per_minute=60) """
 
 # ── Error handlers ──────────────────────────────────────
 register_error_handlers(app)
@@ -280,8 +280,7 @@ class BuildingAssessRequest(BaseModel):
     )
     city: str = Field(
         default="hcmc",
-        description="City key (hcmc, hanoi, danang, jakarta, manila, bangkok, singapore)",
-    )
+        description="City key (hcmc, hanoi, danang)", # TODO: add jakarta, manila, bangkok, singapore for next release version
     return_period: int = Field(
         default=100, ge=2, le=1000,
         description="Primary return period for display/tier",

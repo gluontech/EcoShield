@@ -112,9 +112,12 @@ async def get_extreme_precipitation(
     if not ensemble_data:
         logger.warning("No NEX-GDDP data found, returning fallback")
         return ExtremePrecipitationResult(
+            precip_mm_per_day=150.0,
             max_1day_precipitation_mm=150.0,
             max_5day_precipitation_mm=250.0,
             return_period_years=return_period,
+            uncertainty_p5=100.0,  # Fallback estimate
+            uncertainty_p95=200.0, # Fallback estimate
             confidence=ConfidenceLevel.LOW,
             data_source=DataSource.NEX_GDDP_CMIP6,
         )
@@ -162,9 +165,12 @@ async def get_extreme_precipitation(
 
     if not rx1day_values:
          return ExtremePrecipitationResult(
+            precip_mm_per_day=150.0,
             max_1day_precipitation_mm=150.0,
             max_5day_precipitation_mm=250.0,
             return_period_years=return_period,
+            uncertainty_p5=100.0,
+            uncertainty_p95=200.0,
             confidence=ConfidenceLevel.LOW,
             data_source=DataSource.NEX_GDDP_CMIP6,
         )
@@ -215,8 +221,8 @@ async def get_temperature_baseline(
         
     # Pool all models for baseline stats to get a specialized "multi-model climatology"
     all_tas = np.concatenate(ensemble_tas)
-    # Convert K to C
-    all_tas_c = all_tas - 273.15
+    # Data is already converted to C in _load_ensemble_data if needed
+    all_tas_c = all_tas
     
     # Calculate monthly means from the ensemble data
     monthly_means = {}

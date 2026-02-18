@@ -7,6 +7,13 @@ from datetime import datetime
 from src.tools.subsidence_tools import assess_subsidence
 from src.tools.urban_heat_tools import assess_urban_heat
 from src.core.models.surface import AdjustedSurface
+from src.core.models import (
+    HazardAssessmentResult, HazardIntensity, HazardEventContext,
+    HazardType, ConfidenceLevel, RiskTier, DataSource
+)
+from src.core.models.exposure import ExposureProfile
+from src.core.models.asset import StructuralCharacteristics, BuildingFootprint
+from src.core.models.geometry import Location
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +73,37 @@ async def assess_chronic_hazards_step(data: Dict[str, Any]) -> Dict[str, Any]:
         res = results[i]
         if isinstance(res, Exception):
             logger.error(f"{name} assessment failed: {res}")
+            # Create failed result so it appears in output
+            chronic_results[name] = HazardAssessmentResult(
+                hazard=HazardIntensity(
+                    hazard_type=HazardType(name),
+                    event_context=HazardEventContext(event_type="chronic", return_period_years=1),
+                    intensity_value=0.0,
+                    intensity_unit="unknown",
+                    uncertainty_type="failed",
+                    native_resolution_m=30,
+                    effective_resolution_m=30,
+                    confidence=ConfidenceLevel.LOW,
+                    limitations=[f"Assessment failed: {str(res)}"]
+                ),
+                exposure=ExposureProfile(
+                    location=Location(lat=lat, lon=lon),
+                    elevation_m=0.0,
+                    structure=StructuralCharacteristics(
+                        footprint=BuildingFootprint(
+                            building_id="fallback",
+                            source=DataSource.GOOGLE_OPEN_BUILDINGS_V3, # generic
+                            centroid=Location(lat=lat, lon=lon),
+                            area_m2=100.0
+                        )
+                    )
+                ),
+                intermediate={},
+                impact_score=0.0,
+                impact_tier=RiskTier.LOW,
+                can_aggregate_with=[],
+                dependency_order=1
+            )
         else:
             chronic_results[name] = res
             if name == "subsidence":

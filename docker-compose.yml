@@ -12,6 +12,7 @@ services:
       - redis
     volumes:
       - .:/app
+      - /home/bim/Documents/earth-engine-key.json:/app/secrets/earth-engine-key.json:ro
     networks:
       - ecoshield-network
 
@@ -26,6 +27,7 @@ services:
       - redis
     volumes:
       - .:/app
+      - /home/bim/Documents/earth-engine-key.json:/app/secrets/earth-engine-key.json:ro
     networks:
       - ecoshield-network
     # Keep running even if module completely fails for now (for dev)

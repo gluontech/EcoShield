@@ -112,7 +112,7 @@ async def calculate_composite_step(data: Dict[str, Any]) -> Dict[str, Any]:
             "composite_logic": "Separated Acute/Chronic (No cross-aggregation)"
         },
         
-        portfolio_eal_usd=data.get("portfolio_summary", {}).get("total_expected_annual_loss_usd") if data.get("portfolio_summary") else None
+        portfolio_eal_usd=data.get("portfolio_summary").total_expected_annual_loss_usd if data.get("portfolio_summary") else None
     )
     
     data["output"] = profile

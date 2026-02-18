@@ -18,6 +18,8 @@ FIX v3.2 (Gap R): Added @validate_no_nan decorators.
 """
 
 import asyncio
+import requests
+import logging
 from pathlib import Path
 from typing import List, Tuple
 from dataclasses import dataclass
@@ -29,6 +31,8 @@ from scipy import stats
 from src.core.models import CycloneEventParams
 from src.config.settings import settings
 from src.data.validation import validate_no_nan, DataQualityWarning
+
+logger = logging.getLogger(__name__)
 
 IBTRACS_PATH = Path(settings.IBTRACS_PATH)
 
@@ -79,9 +83,17 @@ async def load_regional_cyclones(
     def _load():
         csv_path = IBTRACS_PATH / "ibtracs.WP.csv"
         if not csv_path.exists():
-            # For MVP, we might mock this if file missing to pass tests
-            # In production, this raises error or forces download
-            return []
+            logger.info(f"Downloading IBTrACS data from {IBTRACS_WP_URL}...")
+            try:
+                IBTRACS_PATH.mkdir(parents=True, exist_ok=True)
+                response = requests.get(IBTRACS_WP_URL, timeout=60)
+                response.raise_for_status()
+                with open(csv_path, "wb") as f:
+                    f.write(response.content)
+                logger.info("Download complete.")
+            except Exception as e:
+                logger.error(f"Failed to download IBTrACS data: {e}")
+                return []
 
         # Optimization: use usecols to load only needed columns
         df = pd.read_csv(
@@ -89,6 +101,11 @@ async def load_regional_cyclones(
             low_memory=False,
             usecols=['SID', 'NAME', 'SEASON', 'BASIN', 'LAT', 'LON', 'WMO_WIND', 'WMO_PRES']
         )
+        
+        # Rename to uppercase for consistency (already uppercase, but safe to keep if needed, 
+        # or just remove if redundant. The previous code had this to normalize. 
+        # Since source is uppercase, this is a no-op but safe).
+        df.columns = [c.upper() for c in df.columns]
         
         # Convert to numeric, coercing errors
         df['LAT'] = pd.to_numeric(df['LAT'], errors='coerce')

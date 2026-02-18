@@ -53,9 +53,44 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
     # 2. Fetch buildings from source
     logger.info(f"Fetching buildings in bbox {bbox}...")
     structures = await asset_source.get_buildings_in_bbox(bbox)
-    logger.info(f"Fetched {len(structures)} buildings")
     
-    cluster = BuildingCluster(buildings=structures)
+    # Fallback to Overture Maps if Google Open Buildings returns empty
+    if not structures:
+        logger.info("Google Open Buildings returned no results. Attempting Overture Maps fallback...")
+        try:
+            from src.data.overture_buildings import OvertureBuildingsSource
+            import asyncio
+            
+            overture_source = OvertureBuildingsSource()
+            
+            # Run blocking DuckDB query in thread
+            # query_buildings returns List[Dict]
+            raw_buildings = await asyncio.to_thread(
+                overture_source.query_buildings,
+                bbox=bbox
+            )
+            
+            if raw_buildings:
+                # Enrich and convert
+                enriched = overture_source.enrich_with_osm_tags(raw_buildings)
+                structures = overture_source.to_structural_characteristics(enriched)
+                logger.info(f"Fetched {len(structures)} buildings from Overture Maps")
+            else:
+                 logger.warning("Overture Maps also returned no results.")
+                 
+        except Exception as e:
+            logger.error(f"Overture Maps fallback failed: {e}")
+
+    logger.info(f"Fetched {len(structures)} buildings total")
+    
+    # Generate a dummy tile_id based on centroid
+    tile_id = f"tile_{lat:.4f}_{lon:.4f}"
+    
+    cluster = BuildingCluster(
+        tile_id=tile_id,
+        bounds=bbox,
+        buildings=structures
+    )
     
     # 3. Create BuildingAdjustedSurface for each building (Gap S)
     # We need ground elevation for each building centroid.
@@ -72,6 +107,7 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
         
         # Note: In a high-concurrency event loop, calling get_elevation in a loop 
         # is okay if it's fast (local COG). 
+        # Only fetch if we have buildings
         ground_elev = await get_elevation(centroid.lat, centroid.lon)
         
         bid = b.footprint.building_id

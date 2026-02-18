@@ -3,7 +3,13 @@ import asyncio
 import logging
 from typing import Dict, Any, List
 
-from src.core.models import HazardType
+from src.core.models import (
+    HazardType, HazardAssessmentResult, HazardIntensity, 
+    HazardEventContext, ConfidenceLevel, RiskTier, DataSource
+)
+from src.core.models.exposure import ExposureProfile
+from src.core.models.asset import StructuralCharacteristics, BuildingFootprint
+from src.core.models.geometry import Location
 from src.tools.storm_surge_tools import assess_storm_surge
 from src.tools.coastal_flood_tools import assess_coastal_flood
 from src.tools.riverine_flood_tools import assess_riverine_flood
@@ -115,6 +121,40 @@ async def assess_acute_hazards_step(data: Dict[str, Any]) -> Dict[str, Any]:
         for k, res in zip(keys, results):
             if isinstance(res, Exception):
                 logger.error(f"Hazard {k} (RP={rp}) failed: {res}")
+                # Fallback for failed hazard
+                rp_map[k] = HazardAssessmentResult(
+                    hazard=HazardIntensity(
+                        hazard_type=HazardType(k),
+                        event_context=HazardEventContext(
+                            event_type="acute", 
+                            return_period_years=rp
+                        ),
+                        intensity_value=0.0,
+                        intensity_unit="unknown",
+                        uncertainty_type="failed",
+                        native_resolution_m=30,
+                        effective_resolution_m=30,
+                        confidence=ConfidenceLevel.LOW,
+                        limitations=[f"Assessment failed: {str(res)}"]
+                    ),
+                    exposure=ExposureProfile(
+                        location=Location(lat=lat, lon=lon),
+                        elevation_m=0.0,
+                        structure=StructuralCharacteristics(
+                            footprint=BuildingFootprint(
+                                building_id="fallback",
+                                source=DataSource.GOOGLE_OPEN_BUILDINGS_V3,
+                                centroid=Location(lat=lat, lon=lon),
+                                area_m2=100.0
+                            )
+                        )
+                    ),
+                    intermediate={},
+                    impact_score=0.0,
+                    impact_tier=RiskTier.LOW,
+                    can_aggregate_with=[],
+                    dependency_order=1
+                )
             else:
                 rp_map[k] = res
                 

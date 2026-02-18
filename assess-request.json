@@ -1,0 +1,26 @@
+{
+  "location": {
+    "lat": 10.783392140711406, 
+    "lon": 106.6924756799341,
+    "name": "Saigon Hotel"
+  },
+  "hazards": [
+    "flood",
+    "heat",
+    "cyclone",
+    "surge",
+    "subsidence",
+    "landslide",
+    "wind",
+    "pluvial"
+  ],
+  "city": "hcmc",
+  "scenario": "ssp245",
+  "time_horizon": "2030-2040",
+  "return_period": 10,
+  "multi_rp": false,
+  "return_periods": [
+    10
+  ],
+  "include_details": true
+}

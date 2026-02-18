@@ -111,7 +111,7 @@ async def get_slope(lat: float, lon: float) -> SlopeResult:
             slope_degrees=0.0,
             aspect_degrees=0.0,
             elevation_m=0.0,
-            data_source=DataSource.COPERNICUS_GLO_30,
+            data_source=DataSource.COPERNICUS_GLO30,
         )
 
     try:
@@ -125,7 +125,7 @@ async def get_slope(lat: float, lon: float) -> SlopeResult:
                     slope_degrees=0.0,
                     aspect_degrees=0.0,
                     elevation_m=0.0,
-                    data_source=DataSource.COPERNICUS_GLO_30,
+                    data_source=DataSource.COPERNICUS_GLO30,
                 )
                 
             window = Window(col - 1, row - 1, 3, 3)
@@ -159,7 +159,7 @@ async def get_slope(lat: float, lon: float) -> SlopeResult:
                 slope_degrees=float(slope_deg),
                 aspect_degrees=float(aspect_deg),
                 elevation_m=float(data[1, 1]), # Center pixel
-                data_source=DataSource.COPERNICUS_GLO_30,
+                data_source=DataSource.COPERNICUS_GLO30,
             )
 
     except Exception as e:
@@ -168,5 +168,5 @@ async def get_slope(lat: float, lon: float) -> SlopeResult:
             slope_degrees=0.0,
             aspect_degrees=0.0,
             elevation_m=0.0,
-            data_source=DataSource.COPERNICUS_GLO_30,
+            data_source=DataSource.COPERNICUS_GLO30,
         )
