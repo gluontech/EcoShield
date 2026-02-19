@@ -1,6 +1,7 @@
 
+import math
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from src.tools.structure_risk_tools import summarize_portfolio
 from src.core.models.composite import (
@@ -8,6 +9,8 @@ from src.core.models.composite import (
 )
 from src.core.models.geometry import Location
 from src.core.models.results import HazardAssessmentResult, PortfolioRiskSummary
+from src.core.models.asset import BuildingCluster, StructuralCharacteristics
+from src.core.models.exposure import ExposureProfile
 from src.core.models.enums import RiskTier, ConfidenceLevel
 from src.config.hazard_weights import HAZARD_WEIGHTS, load_city_weights
 
@@ -84,7 +87,14 @@ async def calculate_composite_step(data: Dict[str, Any]) -> Dict[str, Any]:
         adjusted_elevation_m=adj_surface.subsidence_adjusted_elevation_m if adj_surface else 0.0
     )
     
-    # 5. Create FullRiskProfile
+    # 4b. Inject real building data into hazard results
+    building_cluster = data.get("building_cluster")
+    if building_cluster and building_cluster.buildings:
+        _inject_building_data(
+            lat, lon, building_cluster,
+            chronic_results, acute_results
+        )
+    
     # 5. Create FullRiskProfile
     # v3.2: Methodology tracking + Portfolio EAL (Gap Q)
     profile = FullRiskProfile(
@@ -218,3 +228,67 @@ def _score_to_tier(score: float) -> RiskTier:
     elif score >= 25:
         return RiskTier.MODERATE
     return RiskTier.LOW
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Approximate distance in meters between two lat/lon points."""
+    R = 6_371_000
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(math.radians(lat1))
+         * math.cos(math.radians(lat2))
+         * math.sin(dlon / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _find_nearest_building(
+    lat: float,
+    lon: float,
+    cluster: BuildingCluster,
+) -> Optional[StructuralCharacteristics]:
+    """Return the building in *cluster* closest to (lat, lon), or None."""
+    best: Optional[StructuralCharacteristics] = None
+    best_dist = float("inf")
+    for b in cluster.buildings:
+        c = b.footprint.centroid
+        d = _haversine_m(lat, lon, c.lat, c.lon)
+        if d < best_dist:
+            best_dist = d
+            best = b
+    return best
+
+
+def _inject_building_data(
+    lat: float,
+    lon: float,
+    cluster: BuildingCluster,
+    chronic_results: Dict[str, HazardAssessmentResult],
+    acute_results: Dict[str, HazardAssessmentResult],
+) -> None:
+    """Replace placeholder exposure structures with the nearest real building.
+
+    Mutates the HazardAssessmentResult objects in-place.
+    """
+    nearest = _find_nearest_building(lat, lon, cluster)
+    if nearest is None:
+        return
+
+    logger.info(
+        "Injecting building data: id=%s source=%s area=%.1f m²",
+        nearest.footprint.building_id,
+        nearest.footprint.source,
+        nearest.footprint.area_m2,
+    )
+
+    all_results: Dict[str, HazardAssessmentResult] = {
+        **chronic_results,
+        **acute_results,
+    }
+
+    for name, result in all_results.items():
+        try:
+            # Replace the structure in the exposure profile
+            result.exposure.structure = nearest
+        except Exception as exc:
+            logger.warning("Could not inject building into %s: %s", name, exc)
