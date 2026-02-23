@@ -20,6 +20,7 @@ from src.api.schemas.responses import (
     BuildingAssessResponse, BuildingRiskItem, BuildingPortfolioSummary,
     ReturnPeriodLossItem,
 )
+from src.api.utils import parse_time_horizon
 from src.workflows.hazard_workflow import run_hazard_assessment
 
 router = APIRouter()
@@ -40,17 +41,7 @@ async def assess_buildings(request: BuildingAssessRequest):
     pluvial flood damage, occupancy class, and trapezoidal EAL.
     """
     start = time.monotonic()
-
-    # Time horizon parsing
-    try:
-         if "-" in request.time_horizon:
-             parts = request.time_horizon.split("-")
-             avg_year = int((int(parts[0]) + int(parts[1])) / 2)
-             time_horizon_val = avg_year
-         else:
-             time_horizon_val = int(request.time_horizon) 
-    except ValueError:
-         time_horizon_val = 2050
+    time_horizon_val = parse_time_horizon(request.time_horizon)
 
     try:
         result = await run_hazard_assessment(
@@ -76,10 +67,9 @@ async def assess_buildings(request: BuildingAssessRequest):
 
     elapsed_ms = int((time.monotonic() - start) * 1000)
 
-    # Extract structure results from workflow output
-    # 'result' is FullRiskProfile. Structure results are in 'structure_results' attribute
-    structure_results = getattr(result, "structure_results", [])
-    portfolio_summary = getattr(result, "portfolio_summary", None)
+    # Extract structure results from FullRiskProfile (populated by composite step)
+    structure_results = result.structure_results
+    portfolio_summary = result.portfolio_summary
 
     # Determine actual return periods assessed
     rps_assessed = None
@@ -96,13 +86,13 @@ async def assess_buildings(request: BuildingAssessRequest):
         if raw_losses:
             rp_losses = [
                 ReturnPeriodLossItem(
-                    return_period=rpl.return_period,
-                    annual_exceedance_probability=round(1.0 / rpl.return_period, 6),
-                    flood_damage_ratio=rpl.flood_damage_ratio,
-                    wind_damage_ratio=getattr(rpl, "wind_damage_ratio", None),
-                    pluvial_damage_ratio=getattr(rpl, "pluvial_damage_ratio", None),
-                    max_damage_ratio=rpl.max_damage_ratio,
-                    estimated_loss_usd=getattr(rpl, "estimated_loss_usd", None),
+                    return_period=rpl.return_period_years,
+                    annual_exceedance_probability=round(1.0 / rpl.return_period_years, 6),
+                    flood_damage_ratio=rpl.damage_ratio,
+                    wind_damage_ratio=None,
+                    pluvial_damage_ratio=None,
+                    max_damage_ratio=rpl.damage_ratio,
+                    estimated_loss_usd=rpl.loss_usd,
                 )
                 for rpl in raw_losses
             ]

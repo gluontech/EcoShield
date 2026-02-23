@@ -143,6 +143,9 @@ class StructureRiskResult(BaseModel):
     height_m: Optional[float] = Field(None, ge=0)
     num_stories: int = Field(default=1, ge=1)
     vulnerability_class: Optional[VulnerabilityClass] = None
+    occupancy_class: Optional[str] = Field(
+        None, description="Building occupancy (residential, commercial, industrial, public_service)"
+    )
     ground_floor_elevation_m: float = Field(default=0.0, ge=0)
     replacement_value_usd: Optional[float] = Field(None, ge=0)
     replacement_value_source: str = Field(default="unknown")
@@ -204,5 +207,8 @@ class PortfolioRiskSummary(BaseModel):
     total_replacement_value_usd: float = Field(default=0.0, ge=0)
     total_expected_annual_loss_usd: float = Field(default=0.0, ge=0)
     mean_damage_ratio: float = Field(default=0.0, ge=0, le=1)
+    pml_250yr_usd: Optional[float] = Field(
+        None, description="Probable Maximum Loss at 250-year return period"
+    )
 
     model_config = {"use_enum_values": True}

@@ -101,19 +101,22 @@ async def calculate_composite_step(data: Dict[str, Any]) -> Dict[str, Any]:
         location=Location(lat=lat, lon=lon),
         city=city,
         assessment_id=f"assess_{city}_{lat}_{lon}_{primary_rp}",
-        
+
         acute_risk=acute_composite,
         chronic_risk=chronic_composite,
-        
+
         acute_hazard_details=acute_results,
         chronic_hazard_details=chronic_results,
-        
+
+        structure_results=structure_results,
+        portfolio_summary=portfolio_summary,
+
         surface_adjustments=surface_adj,
-        
+
         return_period=primary_rp,
         time_horizon=data.get("time_horizon", 2050),
         scenario=data.get("slr_scenario", "ssp245"),
-        
+
         methodology={
             "version": "3.2",
             "orchestration": "AsyncIO Pipeline",
@@ -121,8 +124,8 @@ async def calculate_composite_step(data: Dict[str, Any]) -> Dict[str, Any]:
             "chronic_aggregation": "Weighted sum (City-specific weights)",
             "composite_logic": "Separated Acute/Chronic (No cross-aggregation)"
         },
-        
-        portfolio_eal_usd=data.get("portfolio_summary").total_expected_annual_loss_usd if data.get("portfolio_summary") else None
+
+        portfolio_eal_usd=portfolio_summary.total_expected_annual_loss_usd if portfolio_summary else None
     )
     
     data["output"] = profile

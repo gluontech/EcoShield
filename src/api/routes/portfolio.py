@@ -8,21 +8,10 @@ from fastapi import APIRouter, HTTPException
 
 from src.api.schemas.requests import PortfolioRequest
 from src.api.schemas.responses import PortfolioResponse, PortfolioSiteResult
+from src.api.utils import parse_time_horizon, score_to_category
 from src.workflows.hazard_workflow import run_hazard_assessment
 
 router = APIRouter()
-
-
-def _score_to_category(score: float) -> str:
-    if score < 0.2:
-        return "Low"
-    elif score < 0.4:
-        return "Moderate"
-    elif score < 0.6:
-        return "High"
-    elif score < 0.8:
-        return "Very High"
-    return "Extreme"
 
 
 @router.post("/portfolio", response_model=PortfolioResponse)
@@ -38,17 +27,7 @@ async def assess_portfolio(request: PortfolioRequest):
     """
     start = time.monotonic()
     semaphore = asyncio.Semaphore(10)
-
-    # Time horizon parsing
-    try:
-         if "-" in request.time_horizon:
-             parts = request.time_horizon.split("-")
-             avg_year = int((int(parts[0]) + int(parts[1])) / 2)
-             time_horizon_val = avg_year
-         else:
-             time_horizon_val = int(request.time_horizon) 
-    except ValueError:
-         time_horizon_val = 2050
+    time_horizon_val = parse_time_horizon(request.time_horizon)
 
     async def _assess_one(site):
         async with semaphore:
@@ -56,14 +35,14 @@ async def assess_portfolio(request: PortfolioRequest):
                 result = await run_hazard_assessment(
                     lat=site.location.lat,
                     lon=site.location.lon,
-                    city="hcmc", # Defaulting
+                    city=site.city,
                     slr_scenario=request.scenario.value,
                     time_horizon=time_horizon_val,
                     return_period=request.return_period,
                     multi_rp=request.multi_rp,
                     return_periods=request.return_periods,
                 )
-            except Exception as e:
+            except Exception:
                 return PortfolioSiteResult(
                     location={
                         "lat": site.location.lat,
@@ -79,20 +58,23 @@ async def assess_portfolio(request: PortfolioRequest):
                 )
 
             result_dict = result.model_dump() if hasattr(result, "model_dump") else result
-            hazards_data = result_dict.get("hazards", {})
+            # FullRiskProfile stores hazards under acute_hazard_details and chronic_hazard_details
+            chronic = result_dict.get("chronic_hazard_details", {})
+            acute = result_dict.get("acute_hazard_details", {})
+            hazards_data = {**chronic, **acute}
 
             # Calculate scores (normalize 0-100 -> 0-1)
             hazard_scores = {}
             for h, r in hazards_data.items():
                 val = r.get("impact_score", 0.0)
                 hazard_scores[h] = val / 100.0 if val > 1 else val
-            
+
             overall = sum(hazard_scores.values()) / max(len(hazard_scores), 1)
 
-            # Use multi-RP trapezoidal EAL from workflow
-            # if available; fall back to simplified estimate
+            # Use multi-RP trapezoidal EAL from workflow if available;
+            # fall back to simplified estimate
             workflow_eal = result_dict.get("portfolio_eal_usd")
-            
+
             if workflow_eal is not None:
                 eal = round(workflow_eal, 2)
             elif site.asset_value_usd:
@@ -108,7 +90,7 @@ async def assess_portfolio(request: PortfolioRequest):
                     "name": site.location.name,
                 },
                 overall_risk_score=round(overall, 3),
-                overall_risk_category=_score_to_category(overall),
+                overall_risk_category=score_to_category(overall),
                 hazard_scores={k: round(v, 3) for k, v in hazard_scores.items()},
                 asset_value_usd=site.asset_value_usd,
                 expected_annual_loss_usd=eal,
@@ -124,7 +106,6 @@ async def assess_portfolio(request: PortfolioRequest):
     total_eal = sum(r.expected_annual_loss_usd or 0 for r in results)
     total_portfolio_eal = sum(r.portfolio_eal_usd or 0 for r in results)
 
-    # Determine actual return periods assessed
     rps_assessed = None
     if request.multi_rp:
         from src.core.models import STANDARD_RETURN_PERIODS

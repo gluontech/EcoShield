@@ -76,6 +76,9 @@ class Settings(BaseSettings):
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
+    # --- API Security ---
+    CORS_ORIGINS: List[str] = ["*"]  # Override in production with allowed origins
+
     # --- AWS S3 Buckets (Public) ---
     NEX_GDDP_S3_BUCKET: str = "nex-gddp-cmip6"
     COPERNICUS_DEM_S3_BUCKET: str = "copernicus-dem-30m"
