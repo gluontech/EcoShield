@@ -636,7 +636,7 @@ services:
     environment:
       POSTGRES_DB: ecoshield
       POSTGRES_USER: ecoshield
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: your_secure_password_here
     ports: ["5432:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
 
@@ -650,7 +650,7 @@ services:
     ports: ["9000:9000", "9001:9001"]
     environment:
       MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_PASSWORD: your_secure_password_here
     volumes: ["miniodata:/data"]
 
   worker:

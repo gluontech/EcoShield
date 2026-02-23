@@ -63,7 +63,7 @@ class Settings(BaseSettings):
 
     # --- Database (PostgreSQL) ---
     POSTGRES_USER: str = "ecoshield"
-    POSTGRES_PASSWORD: str = "password"
+    POSTGRES_PASSWORD: str
     POSTGRES_DB: str = "ecoshield"
     POSTGRES_HOST: str = "db"
     POSTGRES_PORT: int = 5432
