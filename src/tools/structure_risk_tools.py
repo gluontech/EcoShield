@@ -272,6 +272,14 @@ def summarize_portfolio(
 ) -> PortfolioRiskSummary:
     """Aggregate per-building results into portfolio-level stats."""
     n = len(structure_results)
+    # Portfolio PML: sum of per-building 250yr PML losses
+    pml_250yr = sum(
+        next(
+            (loss.loss_usd for loss in r.losses_by_return_period if loss.return_period_years == 250),
+            r.probable_maximum_loss_usd or 0
+        )
+        for r in structure_results
+    ) if structure_results else None
     return PortfolioRiskSummary(
         portfolio_id=portfolio_id,
         city=city,
@@ -297,6 +305,7 @@ def summarize_portfolio(
         mean_damage_ratio=round(
             sum(r.max_damage_ratio for r in structure_results) / max(n, 1), 4
         ),
+        pml_250yr_usd=round(pml_250yr, 2) if pml_250yr else None,
     )
 
 

@@ -82,6 +82,10 @@ class AssessRequest(BaseModel):
 class PortfolioSite(BaseModel):
     """Single site in a portfolio."""
     location: Location
+    city: str = Field(
+        default="hcmc",
+        description="City key for this site (hcmc, hanoi, danang, jakarta, manila, bangkok, singapore)",
+    )
     asset_value_usd: Optional[float] = Field(None, ge=0)
     asset_type: Optional[str] = None
 
@@ -123,7 +127,7 @@ class HazardQueryParams(BaseModel):
 class BuildingAssessRequest(BaseModel):
     """Structure-level risk assessment request."""
     lat: float = Field(..., ge=-60, le=60, description="Center latitude")
-    lon: float = Field(..., ge=-60, le=180, description="Center longitude")
+    lon: float = Field(..., ge=-180, le=180, description="Center longitude")
     radius_m: int = Field(
         default=500, ge=50, le=5000,
         description="Search radius in meters",

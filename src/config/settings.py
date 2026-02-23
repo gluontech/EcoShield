@@ -63,7 +63,7 @@ class Settings(BaseSettings):
 
     # --- Database (PostgreSQL) ---
     POSTGRES_USER: str = "ecoshield"
-    POSTGRES_PASSWORD: str
+    POSTGRES_PASSWORD: str = "ecoshield"  # Override via POSTGRES_PASSWORD env var in production
     POSTGRES_DB: str = "ecoshield"
     POSTGRES_HOST: str = "db"
     POSTGRES_PORT: int = 5432
@@ -75,6 +75,9 @@ class Settings(BaseSettings):
             f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
+
+    # --- API Security ---
+    CORS_ORIGINS: List[str] = ["*"]  # Override in production with allowed origins
 
     # --- AWS S3 Buckets (Public) ---
     NEX_GDDP_S3_BUCKET: str = "nex-gddp-cmip6"

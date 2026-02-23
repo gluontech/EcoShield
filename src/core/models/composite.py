@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field, computed_field
 from .enums import RiskTier, ConfidenceLevel, HazardType
 from .geometry import Location, DataLineage
-from .results import HazardAssessmentResult
+from .results import HazardAssessmentResult, StructureRiskResult, PortfolioRiskSummary
 
 
 class CompositeRiskResult(BaseModel):
@@ -70,6 +70,16 @@ class FullRiskProfile(BaseModel):
     # Individual hazard details
     acute_hazard_details: Dict[str, HazardAssessmentResult]
     chronic_hazard_details: Dict[str, HazardAssessmentResult]
+
+    # Structure-level results (populated when include_buildings=True)
+    structure_results: List[StructureRiskResult] = Field(
+        default_factory=list,
+        description="Per-building risk results (populated when include_buildings=True)"
+    )
+    portfolio_summary: Optional[PortfolioRiskSummary] = Field(
+        None,
+        description="Aggregated portfolio statistics across all assessed buildings"
+    )
 
     # Surface tracking
     surface_adjustments: SurfaceAdjustments
