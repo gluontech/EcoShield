@@ -89,9 +89,9 @@ async def assess_coastal_flood(
         confidence = ConfidenceLevel.HIGH
         inundation_depth = 0.0
     elif effective_elevation < 2:
-        confidence = ConfidenceLevel.MODERATE
+        confidence = ConfidenceLevel.LOW
     else:
-        confidence = ConfidenceLevel.MODERATE
+        confidence = ConfidenceLevel.LOW
 
     limitations = [
         "Bathtub model (no wave runup, no coastal morphology)",

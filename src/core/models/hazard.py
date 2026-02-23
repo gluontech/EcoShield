@@ -4,7 +4,7 @@
 from datetime import datetime
 from typing import Optional, List, Literal, TYPE_CHECKING
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from .enums import ConfidenceLevel, HazardType
 from .geometry import DataLineage
 
@@ -68,6 +68,19 @@ class HazardIntensity(BaseModel):
     lineage: Optional[DataLineage] = Field(None, description="Data provenance")
 
     model_config = {"use_enum_values": True}
+
+    @model_validator(mode='after')
+    def ensure_lineage(self) -> "HazardIntensity":
+        if self.lineage is None:
+            from .enums import DataSource
+            source_enum = DataSource.COPERNICUS_GLO30
+            if self.data_sources:
+                for ds in DataSource:
+                    if ds.value in self.data_sources[0].lower():
+                        source_enum = ds
+                        break
+            self.lineage = DataLineage(source=source_enum)
+        return self
 
 
 

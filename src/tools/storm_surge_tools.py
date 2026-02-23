@@ -90,6 +90,11 @@ async def assess_storm_surge(
     effective_elevation = elevation_m - subsidence_effect
     inundation_depth = max(0, total_surge - effective_elevation)
 
+    # Physical guardrail: Cap extreme surge depth (Gap 2)
+    if inundation_depth > 20.0:
+        logger.warning(f"Capping extreme storm surge depth from {inundation_depth} to 20 m")
+        inundation_depth = 20.0
+
     data_sources = [
         f"IBTrACS cyclone params ({DataSource.IBTRACS_V04.value})",
         f"Copernicus GLO-30 DEM ({DataSource.COPERNICUS_GLO30.value})",

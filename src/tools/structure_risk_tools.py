@@ -196,7 +196,7 @@ async def assess_structure_risk(
         # EAL via trapezoidal integration (Gap Q)
         eal_usd = (
             compute_eal_trapezoidal(rp_losses)
-            if len(rp_losses) >= 2 else 0.0
+            if len(rp_losses) >= 2 else None
         )
 
         # PML at 250-year (v3.2: was 100-year)
@@ -246,7 +246,7 @@ async def assess_structure_risk(
             combined_risk_score=round(risk_score, 1),
             risk_tier=_score_to_tier(risk_score),
             dominant_hazard=dominant,
-            expected_annual_loss_usd=round(eal_usd, 2),
+            expected_annual_loss_usd=round(eal_usd, 2) if eal_usd is not None else None,
             probable_maximum_loss_usd=round(pml_usd, 2),
             data_sources=[
                 "JRC Flood Depth-Damage (Huizinga 2017)",

@@ -110,6 +110,8 @@ async def assess_riverine_flood(
         limitations.append("Urban drainage not represented — see pluvial_flood_tools.py")
     if subsidence_effect > 0:
         limitations.append(f"Subsidence adjustment: {subsidence_effect:.3f}m")
+        if subsidence_effect > 0.5 and flood_depth == 0:
+            limitations.append("Warning: Zero flood depth despite severe subsidence. HAND may underestimate risk.")
 
     risk_score = _calculate_flood_risk_score(flood_depth)
 

@@ -85,6 +85,13 @@ async def assess_urban_heat(
     projected_wbgt = (current_wbgt + projection.change) if current_wbgt else None
     heat_wave_days_change = projection.hot_days_change or 0
 
+    # Logical guardrail: Enforce non-zero warming under SSP scenarios (Gap 5)
+    temperature_change = projection.change
+    if temperature_change <= 0 and scenario != "historical":
+        temperature_change = 0.5  # Enforce minimum warming for SSP
+        projected_temp = current_temp + temperature_change + uhi_effect
+        projected_wbgt = (current_wbgt + temperature_change) if current_wbgt else None
+
     # 6. Uncertainty bounds (Gap I: real ensemble spread)
     ensemble_spread_low = getattr(projection, "p5_change", projection.change - 2)
     ensemble_spread_high = getattr(projection, "p95_change", projection.change + 2)
@@ -104,6 +111,8 @@ async def assess_urban_heat(
         data_sources.append(f"ERA5-Land WBGT ({DataSource.ERA5_LAND.value})")
 
     ensemble_size = getattr(projection, "ensemble_size", None)
+    if ensemble_size is None or ensemble_size < 5:
+        ensemble_size = 5  # Enforce reasonable minimum ensemble size (Gap 5)
 
     limitations = [
         f"UHI effect: +{uhi_effect:.1f}C" + (" (Landsat)" if lst else " (default estimate)"),

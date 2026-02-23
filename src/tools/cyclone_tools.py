@@ -76,6 +76,11 @@ async def assess_cyclone(
     except Exception as exc:
         logger.warning("Holland wind profile failed, using raw Vmax: %s", exc)
 
+    # Physical guardrail: Cap extreme wind speeds (Gap 1)
+    if site_wind_ms > 120.0:
+        logger.warning(f"Capping extreme tropical cyclone wind speed from {site_wind_ms} to 120 m/s")
+        site_wind_ms = 120.0
+
     # Confidence based on data quality
     ss_cat = cyclone_params.saffir_simpson_category
     if ss_cat >= 3:

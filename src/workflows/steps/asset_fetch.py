@@ -82,6 +82,35 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
             logger.error(f"Overture Maps fallback failed: {e}")
 
     logger.info(f"Fetched {len(structures)} buildings total")
+
+    # Filter and sort structures by distance to requested point
+    def haversine(lat1, lon1, lat2, lon2):
+        import math
+        R = 6371000
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+        return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+
+    filtered_structures = []
+    for s in structures:
+        # Reject low confidence ML detections
+        conf = getattr(s.footprint, 'confidence', 1.0)
+        if 0 < conf < 0.65:
+            continue
+            
+        dist = haversine(lat, lon, s.footprint.centroid.lat, s.footprint.centroid.lon)
+        s._distance = dist
+        
+        # If querying for a specific building (small radius), reject far matches
+        if radius_m <= 100 and dist > 20:
+            continue
+            
+        filtered_structures.append(s)
+
+    filtered_structures.sort(key=lambda x: getattr(x, '_distance', 9999))
+    structures = filtered_structures
+    logger.info(f"Kept {len(structures)} buildings after confidence and spatial filtering")
     
     # Generate a dummy tile_id based on centroid
     tile_id = f"tile_{lat:.4f}_{lon:.4f}"

@@ -1,8 +1,8 @@
 {
   "location": {
-    "lat": 10.783392140711406, 
-    "lon": 106.6924756799341,
-    "name": "Saigon Hotel"
+    "lat": 10.7962818,
+    "lon": 106.67308139341037,
+    "name": "Eastin Grand Hotel Saigon"
   },
   "hazards": [
     "flood",
@@ -18,7 +18,7 @@
   "scenario": "ssp245",
   "time_horizon": "2030-2040",
   "return_period": 10,
-  "multi_rp": false,
+  "multi_rp": true,
   "return_periods": [
     10
   ],

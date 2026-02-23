@@ -77,6 +77,12 @@ class HazardAssessmentResult(BaseModel):
 
     model_config = {"use_enum_values": True}
 
+    @model_validator(mode='after')
+    def ensure_validation(self) -> "HazardAssessmentResult":
+        if self.validation is None:
+            self.validation = ValidationMetrics(validation_source="unvalidated_baseline")
+        return self
+
 
 class ReturnPeriodLoss(BaseModel):
     """
@@ -183,7 +189,7 @@ class StructureRiskResult(BaseModel):
     dominant_hazard: Optional[HazardType] = None
 
     # Financial impact (v3.2: multi-RP EAL)
-    expected_annual_loss_usd: float = Field(default=0.0, ge=0)
+    expected_annual_loss_usd: Optional[float] = Field(default=None, ge=0)
     probable_maximum_loss_usd: float = Field(default=0.0, ge=0)
 
     # Metadata

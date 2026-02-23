@@ -29,6 +29,8 @@ class AssessResponse(BaseModel):
     )
     overall_risk_score: float = Field(..., ge=0, le=1)
     overall_risk_category: str
+    aggregation_method: Optional[str] = Field(None, description="Method used to calculate overall risk")
+    hazard_weights: Optional[Dict[str, float]] = Field(None, description="Weights applied to individual hazards")
     hazards: List[HazardScore]
     portfolio_eal_usd: Optional[float] = Field(
         None, description="Multi-RP trapezoidal EAL in USD. "

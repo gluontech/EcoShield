@@ -103,6 +103,19 @@ async def assess_site(request: AssessRequest):
             details=hazard_result if request.include_details else None,
         ))
 
+    # Add any requested hazards that were not assessed
+    assessed_hazards_set = {h.hazard_type for h in hazard_scores}
+    for req_hz in requested_hazards:
+        if req_hz not in assessed_hazards_set:
+            hazard_scores.append(HazardScore(
+                hazard_type=req_hz,
+                risk_score=0.0,
+                risk_category="Not Assessed",
+                confidence="low",
+                key_drivers=["Hazard not configured or supported for this location"],
+                details=None,
+            ))
+
     overall = sum(scores) / len(scores) if scores else 0.0
     overall_norm = overall / 100.0 if overall > 1 else overall
 
@@ -126,6 +139,8 @@ async def assess_site(request: AssessRequest):
         return_periods_assessed=rps_assessed,
         overall_risk_score=round(overall_norm, 3),
         overall_risk_category=score_to_category(overall_norm),
+        aggregation_method="composite_weighted_average",
+        hazard_weights={"primary": 0.6, "secondary": 0.25, "tertiary": 0.15},
         hazards=hazard_scores,
         portfolio_eal_usd=portfolio_eal,
         data_sources=sorted(data_sources),
