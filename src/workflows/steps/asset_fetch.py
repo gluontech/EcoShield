@@ -1,4 +1,5 @@
 
+import asyncio
 import logging
 from typing import Dict, Any, List
 
@@ -55,7 +56,6 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
     async def fetch_overture(search_bbox):
         try:
             from src.data.overture_buildings import OvertureBuildingsSource
-            import asyncio
             overture_source = OvertureBuildingsSource()
             raw_buildings = await asyncio.to_thread(overture_source.query_buildings, bbox=search_bbox)
             if raw_buildings:
@@ -120,11 +120,20 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
         matched_bonus = 0.0
         b_name = (getattr(s.footprint, 'name', '') or "").lower()
         b_addr = (getattr(s.footprint, 'address', '') or "").lower()
-        
-        # Exact/Substring match for Name
+        b_aliases = [a.lower() for a in getattr(s.footprint, 'name_aliases', []) if a]
+
+        # Exact/Substring match for Name (check primary name + all language aliases)
+        name_matched = False
         if req_name and b_name and (req_name in b_name or b_name in req_name):
+            name_matched = True
+        if not name_matched and req_name:
+            for alias in b_aliases:
+                if req_name in alias or alias in req_name:
+                    name_matched = True
+                    break
+        if name_matched:
             matched_bonus += 200.0  # Massive bonus for matching name
-            
+
         # Exact/Substring match for Address
         if req_address and b_addr and (req_address in b_addr or b_addr in req_address):
             matched_bonus += 100.0
@@ -184,26 +193,21 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
     # We need ground elevation for each building centroid.
     # OpenBuildingsSource provides height_m (building height), not ground elevation.
     # So we fetch ground elevation from DEM.
-    
-    surfaces = {}
-    for b in structures:
-        # Use simple centroid lookup. For optimization, we could batch this
-        # or use a raster sampling method if get_elevation supported it.
-        # For now, per-building await is slow but correct for MVP.
-        # Ideally get_elevation should be cached or local.
-        centroid = b.footprint.centroid
-        
-        # Note: In a high-concurrency event loop, calling get_elevation in a loop 
-        # is okay if it's fast (local COG). 
-        # Only fetch if we have buildings
-        ground_elev = await get_elevation(centroid.lat, centroid.lon)
-        
-        bid = b.footprint.building_id
-        surfaces[bid] = BuildingAdjustedSurface(
+
+    async def _fetch_elev(building):
+        centroid = building.footprint.centroid
+        elev = await get_elevation(centroid.lat, centroid.lon)
+        return building.footprint.building_id, elev
+
+    # Parallel elevation fetches — all buildings in same area share the same DEM tile
+    elev_results = await asyncio.gather(*[_fetch_elev(b) for b in structures])
+    surfaces = {
+        bid: BuildingAdjustedSurface(
             building_id=bid,
-            original_elevation_m=ground_elev,
-            # Subsidence will be populated in Step 1
+            original_elevation_m=elev,
         )
+        for bid, elev in elev_results
+    }
         
     data["building_cluster"] = cluster
     data["building_surfaces"] = surfaces

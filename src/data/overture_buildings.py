@@ -111,7 +111,8 @@ class OvertureBuildingsSource:
             class,
             subtype,
             sources,
-            names
+            names,
+            addresses
         FROM read_parquet('{OVERTURE_BUILDINGS_PATH}*.parquet', hive_partitioning=1)
         WHERE bbox.xmin >= {bbox.min_lon}
           AND bbox.xmax <= {bbox.max_lon}
@@ -123,7 +124,8 @@ class OvertureBuildingsSource:
         try:
             result = self.conn.execute(query).fetchall()
             columns = ['id', 'geometry_wkt', 'area_m2', 'centroid_lat', 'centroid_lon',
-                        'height', 'num_floors', 'class', 'subtype', 'sources', 'names']
+                        'height', 'num_floors', 'class', 'subtype', 'sources', 'names',
+                        'addresses']
             
             return [dict(zip(columns, row)) for row in result]
         except Exception as e:
@@ -160,11 +162,16 @@ class OvertureBuildingsSource:
                 b['height_m'] = float(b['height'])
                 
             # Extract common name if available (Overture names schema: STRUCT(primary VARCHAR, ...))
-            # In duckdb, it comes out as a dict: {'primary': 'Hotel Name', ...}
+            # In duckdb, it comes out as a dict: {'primary': 'Hotel Name', 'common': {'en': '...', ...}}
+            b['name_aliases'] = []
             if b.get('names') and isinstance(b['names'], dict):
                 b['name_primary'] = b['names'].get('primary', '')
+                # Extract common names in all available languages for cross-language matching
+                common = b['names'].get('common')
+                if common and isinstance(common, dict):
+                    b['name_aliases'] = [v for v in common.values() if v]
             elif b.get('names') and isinstance(b['names'], str):
-                 b['name_primary'] = b['names']
+                b['name_primary'] = b['names']
             
             # Extract address (often freeform in OSM context, but duckdb returns it as a dict/list of parts sometimes)
             if b.get('addresses') and isinstance(b['addresses'], list) and len(b['addresses']) > 0:
@@ -221,23 +228,32 @@ class OvertureBuildingsSource:
                 confidence=0.0,
                 overture_id=b.get('id'),
                 name=b.get('name_primary'),
-                address=b.get('address_primary')
+                address=b.get('address_primary'),
+                name_aliases=b.get('name_aliases', []),
             )
-            
+
+            # Resolve height: prefer direct height_m, else estimate from num_floors
+            num_floors_val = b.get('num_stories')  # set from num_floors in enrich step
+            height_m_val = b.get('height_m')
+
+            if not height_m_val and num_floors_val:
+                height_m_val = num_floors_val * 3.0  # estimate 3m per floor for SEA
+
             height = None
-            if b.get('height_m'):
+            if height_m_val:
                 height = BuildingHeight(
-                    height_m=b['height_m'],
+                    height_m=height_m_val,
                     height_source=DataSource.OVERTURE_MAPS_BUILDINGS,
+                    num_floors=num_floors_val,
                 )
-            
+
             occupancy = b.get('mapped_occupancy', BuildingOccupancy.UNKNOWN)
-            
-            # Material inference
+
+            # Material inference — uses resolved height (includes num_floors estimate)
             material = BuildingMaterial.MASONRY_UNREINFORCED  # SEA default
             vuln_class = VulnerabilityClass.CLASS_III_MASONRY
-            
-            if b.get('height_m') and b['height_m'] > 15:
+
+            if height_m_val and height_m_val > 15:
                 material = BuildingMaterial.CONCRETE_REINFORCED
                 vuln_class = VulnerabilityClass.CLASS_IV_REINFORCED
             elif b.get('area_m2', 0) < 30:
