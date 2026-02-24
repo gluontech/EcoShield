@@ -11,7 +11,9 @@ class Location(BaseModel):
     """Geographic location."""
     lat: float = Field(..., ge=-60, le=60, description="Latitude")
     lon: float = Field(..., ge=-180, le=180, description="Longitude")
-    name: Optional[str] = Field(None, description="Location label")
+    name: Optional[str] = Field(None, description="Location label or building name")
+    address: Optional[str] = Field(None, description="Physical address")
+    description: Optional[str] = Field(None, description="Additional context or description of the asset")
 
 
 class AssessRequest(BaseModel):

@@ -68,6 +68,8 @@ hazard_pipeline = create_hazard_assessment_pipeline()
 
 async def run_hazard_assessment(
     lat: float, lon: float,
+    name: str = None,
+    address: str = None,
     city: str = "hcmc",
     return_period: int = 100,
     time_horizon: int = 2050,
@@ -93,6 +95,8 @@ async def run_hazard_assessment(
     input_data = {
         "lat": lat,
         "lon": lon,
+        "name": name,
+        "address": address,
         "city": city,
         "return_period": return_period,            # Primary RP for display
         "return_periods": rp_list,                 # NEW v3.2 (Gap Q)

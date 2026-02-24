@@ -44,6 +44,8 @@ async def assess_site(request: AssessRequest):
         result = await run_hazard_assessment(
             lat=request.location.lat,
             lon=request.location.lon,
+            name=request.location.name,
+            address=request.location.address,
             city=request.city,
             slr_scenario=request.scenario.value,
             time_horizon=time_horizon_val,

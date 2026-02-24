@@ -28,6 +28,8 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     lat = data["lat"]
     lon = data["lon"]
+    req_name = (data.get("name") or "").lower().strip()
+    req_address = (data.get("address") or "").lower().strip()
     radius_m = data.get("building_radius_m", 500)
     include_buildings = data.get("include_buildings", True)
     
@@ -50,36 +52,38 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
         max_lon=lon + delta_deg
     )
     
-    # 2. Fetch buildings from source
-    logger.info(f"Fetching buildings in bbox {bbox}...")
-    structures = await asset_source.get_buildings_in_bbox(bbox)
-    
-    # Fallback to Overture Maps if Google Open Buildings returns empty
-    if not structures:
-        logger.info("Google Open Buildings returned no results. Attempting Overture Maps fallback...")
+    async def fetch_overture(search_bbox):
         try:
             from src.data.overture_buildings import OvertureBuildingsSource
             import asyncio
-            
             overture_source = OvertureBuildingsSource()
-            
-            # Run blocking DuckDB query in thread
-            # query_buildings returns List[Dict]
-            raw_buildings = await asyncio.to_thread(
-                overture_source.query_buildings,
-                bbox=bbox
-            )
-            
+            raw_buildings = await asyncio.to_thread(overture_source.query_buildings, bbox=search_bbox)
             if raw_buildings:
-                # Enrich and convert
                 enriched = overture_source.enrich_with_osm_tags(raw_buildings)
-                structures = overture_source.to_structural_characteristics(enriched)
-                logger.info(f"Fetched {len(structures)} buildings from Overture Maps")
-            else:
-                 logger.warning("Overture Maps also returned no results.")
-                 
+                return overture_source.to_structural_characteristics(enriched)
         except Exception as e:
-            logger.error(f"Overture Maps fallback failed: {e}")
+            logger.error(f"Overture Maps fetch failed: {e}")
+        return []
+
+    structures = []
+    overture_tried = False
+    
+    # If the user is specifically trying to match a building by name or address, 
+    # we MUST use Overture Maps first because Google Open Buildings lacks metadata.
+    if req_name or req_address:
+        logger.info("Name/address provided. Prioritizing Overture Maps for metadata matching.")
+        structures = await fetch_overture(bbox)
+        overture_tried = True
+
+    # 2. Fetch from default source (Google) if we haven't found anything yet
+    if not structures:
+        logger.info(f"Fetching buildings in bbox {bbox} from default source...")
+        structures = await asset_source.get_buildings_in_bbox(bbox)
+        
+    # Fallback to Overture Maps if Google Open Buildings returns empty (and we haven't tried yet)
+    if not structures and not overture_tried:
+        logger.info("Google Open Buildings returned no results. Attempting Overture Maps fallback...")
+        structures = await fetch_overture(bbox)
 
     logger.info(f"Fetched {len(structures)} buildings total")
 
@@ -92,6 +96,15 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
         a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
         return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
+    try:
+        from shapely.wkt import loads as load_wkt
+        from shapely.geometry import Point
+        query_point = Point(lon, lat)
+        shapely_available = True
+    except ImportError:
+        logger.warning("shapely not installed. Falling back to simple distance.")
+        shapely_available = False
+
     filtered_structures = []
     for s in structures:
         # Reject low confidence ML detections
@@ -100,10 +113,56 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
             continue
             
         dist = haversine(lat, lon, s.footprint.centroid.lat, s.footprint.centroid.lon)
+        # Default to centroid distance
         s._distance = dist
         
-        # If querying for a specific building (small radius), reject far matches
-        if radius_m <= 100 and dist > 20:
+        # --- Metadata Matching Bonus ---
+        matched_bonus = 0.0
+        b_name = (getattr(s.footprint, 'name', '') or "").lower()
+        b_addr = (getattr(s.footprint, 'address', '') or "").lower()
+        
+        # Exact/Substring match for Name
+        if req_name and b_name and (req_name in b_name or b_name in req_name):
+            matched_bonus += 200.0  # Massive bonus for matching name
+            
+        # Exact/Substring match for Address
+        if req_address and b_addr and (req_address in b_addr or b_addr in req_address):
+            matched_bonus += 100.0
+            
+        if shapely_available:
+            try:
+                wkt_data = s.footprint.footprint_wkt
+                if wkt_data and wkt_data.startswith("{"):
+                    import ast
+                    from shapely.geometry import shape
+                    poly = shape(ast.literal_eval(wkt_data))
+                else:
+                    poly = load_wkt(wkt_data)
+
+                if poly.contains(query_point):
+                    # Point is exactly inside this building footprint
+                    base_dist = 0.0
+                else:
+                    # Point is not inside, but we can measure distance to the polygon edge
+                    poly_dist_m = poly.distance(query_point) * 111320.0
+                    
+                    # Gravity model for un-contained points: give large buildings a larger "capture radius"
+                    import math
+                    equiv_radius = math.sqrt(s.footprint.area_m2 / math.pi)
+                    base_dist = max(0.0, poly_dist_m - equiv_radius)
+                    base_dist = min(dist, base_dist)
+                    
+                s._distance = base_dist - matched_bonus
+                    
+            except Exception as e:
+                logger.warning(f"Could not parse WKT or check containment: {e}")
+                s._distance = dist - matched_bonus
+        else:
+            s._distance = dist - matched_bonus
+                
+        # Fallback distance check if point is not inside any polygon
+        # But if it matched metadata, NEVER reject it via distance.
+        if radius_m <= 100 and s._distance > 100 and matched_bonus == 0:
             continue
             
         filtered_structures.append(s)

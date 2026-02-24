@@ -160,17 +160,36 @@ class OpenBuildingsSource:
         except Exception:
             return []
 
-        return [
-            {
-                'geometry': f['geometry'],
-                'area_m2': f['properties'].get('area_in_meters', 0),
-                'confidence': f['properties'].get('confidence', 0),
-                'plus_code': f['properties'].get('full_plus_code', ''),
-                'centroid_lat': f['properties'].get('latitude', 0),
-                'centroid_lon': f['properties'].get('longitude', 0),
-            }
-            for f in features
-        ]
+        res = []
+        for f in features:
+            geom = f.get('geometry', {})
+            clat, clon = 0.0, 0.0
+            lat_prop = f.get('properties', {}).get('latitude')
+            lon_prop = f.get('properties', {}).get('longitude')
+            
+            if lat_prop is not None and lon_prop is not None:
+                clat, clon = lat_prop, lon_prop
+            elif geom and geom.get('coordinates'):
+                try:
+                    # GeoJSON Polygon coords: [[[lon, lat], ...]]
+                    coords = geom['coordinates'][0] 
+                    lons = [c[0] for c in coords]
+                    lats = [c[1] for c in coords]
+                    clon = sum(lons) / len(lons)
+                    clat = sum(lats) / len(lats)
+                except Exception:
+                    pass
+                    
+            res.append({
+                'geometry': geom,
+                'area_m2': f.get('properties', {}).get('area_in_meters', 0),
+                'confidence': f.get('properties', {}).get('confidence', 0),
+                'plus_code': f.get('properties', {}).get('full_plus_code', ''),
+                'centroid_lat': clat,
+                'centroid_lon': clon,
+            })
+            
+        return res
     
     def _fetch_heights_gee(
         self, bbox: BoundingBox, year: int = 2023

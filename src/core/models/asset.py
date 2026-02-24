@@ -52,6 +52,8 @@ class BuildingFootprint(BaseModel):
     # Overture Maps specific (when available)
     overture_id: Optional[str] = Field(None, description="Overture GERS ID for cross-reference")
     osm_id: Optional[str] = Field(None, description="OpenStreetMap way/relation ID if from OSM")
+    name: Optional[str] = Field(None, description="Building name (usually from OSM/Overture)")
+    address: Optional[str] = Field(None, description="Building address")
     
     model_config = {"arbitrary_types_allowed": True}
 

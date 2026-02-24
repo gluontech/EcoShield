@@ -110,7 +110,8 @@ class OvertureBuildingsSource:
             num_floors,
             class,
             subtype,
-            sources
+            sources,
+            names
         FROM read_parquet('{OVERTURE_BUILDINGS_PATH}*.parquet', hive_partitioning=1)
         WHERE bbox.xmin >= {bbox.min_lon}
           AND bbox.xmax <= {bbox.max_lon}
@@ -122,7 +123,7 @@ class OvertureBuildingsSource:
         try:
             result = self.conn.execute(query).fetchall()
             columns = ['id', 'geometry_wkt', 'area_m2', 'centroid_lat', 'centroid_lon',
-                        'height', 'num_floors', 'class', 'subtype', 'sources']
+                        'height', 'num_floors', 'class', 'subtype', 'sources', 'names']
             
             return [dict(zip(columns, row)) for row in result]
         except Exception as e:
@@ -157,6 +158,25 @@ class OvertureBuildingsSource:
             
             if b.get('height'):
                 b['height_m'] = float(b['height'])
+                
+            # Extract common name if available (Overture names schema: STRUCT(primary VARCHAR, ...))
+            # In duckdb, it comes out as a dict: {'primary': 'Hotel Name', ...}
+            if b.get('names') and isinstance(b['names'], dict):
+                b['name_primary'] = b['names'].get('primary', '')
+            elif b.get('names') and isinstance(b['names'], str):
+                 b['name_primary'] = b['names']
+            
+            # Extract address (often freeform in OSM context, but duckdb returns it as a dict/list of parts sometimes)
+            if b.get('addresses') and isinstance(b['addresses'], list) and len(b['addresses']) > 0:
+                address_node = b['addresses'][0]
+                addr_parts = []
+                if isinstance(address_node, dict):
+                    if address_node.get('freeform'):
+                        addr_parts.append(address_node.get('freeform'))
+                    else:
+                        for k in ['housenumber', 'street', 'city']:
+                            if address_node.get(k): addr_parts.append(address_node[k])
+                b['address_primary'] = ", ".join(addr_parts) if addr_parts else ''
         
         return buildings
     
@@ -168,17 +188,40 @@ class OvertureBuildingsSource:
         """Convert Overture buildings to EcoShield StructuralCharacteristics."""
         
         results = []
+        import math
         for b in buildings:
+            area = b.get('area_m2', 1.0)
+            geometry_wkt = b.get('geometry_wkt')
+            
+            # Approximate area calculation if duckdb returned NaN
+            if (area is None or math.isnan(area) or area <= 0.0) and geometry_wkt:
+                try:
+                    from shapely.wkt import loads as load_wkt
+                    poly = load_wkt(geometry_wkt)
+                    # Rough conversion factor from dec degrees squared to sq meters
+                    # lat ~ 111320m, lon ~ 111320m * cos(lat)
+                    clat = b.get('centroid_lat', 0)
+                    lon_to_m = 111320.0 * math.cos(math.radians(clat))
+                    area = poly.area * (111320.0 * lon_to_m)
+                except Exception:
+                    area = 1.0
+            
+            if area is None or math.isnan(area) or area <= 0:
+                area = 1.0
+                
             footprint = BuildingFootprint(
                 building_id=b.get('id', 'unknown'),
                 source=DataSource.OVERTURE_MAPS_BUILDINGS,
                 centroid=Location(
-                    latitude=b.get('centroid_lat', 0),       # FIX v3.2 (Gap N)
-                    longitude=b.get('centroid_lon', 0),      # FIX v3.2 (Gap N)
+                    lat=b.get('centroid_lat', 0),       # FIX v3.2 (Gap N)
+                    lon=b.get('centroid_lon', 0),      # FIX v3.2 (Gap N)
                 ),
-                area_m2=b.get('area_m2', 0),
+                area_m2=area,
+                footprint_wkt=geometry_wkt,
                 confidence=0.0,
                 overture_id=b.get('id'),
+                name=b.get('name_primary'),
+                address=b.get('address_primary')
             )
             
             height = None
