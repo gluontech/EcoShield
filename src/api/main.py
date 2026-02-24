@@ -20,6 +20,7 @@ from src.api.routes import assess, portfolio, hazards, buildings
 # from src.api.middleware.rate_limit import RateLimitMiddleware # Deferred
 from src.api.errors import register_error_handlers
 from src.config.settings import settings
+from src.data.elevation import close_dem_cache
 
 
 @asynccontextmanager
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI):
     # Pre-warm caches, verify data availability
     yield
     # ── Shutdown ──
+    close_dem_cache()
     print("EcoShield API shutting down…")
 
 

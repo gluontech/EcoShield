@@ -12,6 +12,8 @@ FIX v3.2 (Gap R): Added @validate_no_nan decorators and fill-value handling.
 import asyncio
 import logging
 import math
+import threading
+from collections import OrderedDict
 from pathlib import Path
 from typing import Optional, Tuple, Dict
 
@@ -31,17 +33,62 @@ logger = logging.getLogger(__name__)
 
 DEM_PATH = Path(settings.COPERNICUS_DEM_LOCAL_CACHE)
 
-# Cache rasterio dataset handles to avoid repeated file open/close
-# All buildings in the same 1x1 degree area use the same DEM tile
-_dem_dataset_cache: Dict[str, rasterio.DatasetReader] = {}
+# Per-thread LRU cache for rasterio dataset handles.
+# Each thread gets its own set of readers so concurrent asyncio.to_thread()
+# calls never share a GDAL handle (rasterio handles are not thread-safe).
+# The cache is bounded to avoid leaking file descriptors in long-running workers.
+_MAX_CACHED_DATASETS = 12
+_thread_local = threading.local()
 
 
 def _get_cached_dataset(dem_path: Path) -> rasterio.DatasetReader:
-    """Return a cached rasterio dataset, opening it on first access."""
+    """Return a per-thread cached rasterio dataset, opening it on first access.
+
+    Uses an LRU eviction policy bounded to ``_MAX_CACHED_DATASETS`` entries per
+    thread.  Evicted handles are closed immediately so file descriptors don't
+    leak over the lifetime of the process.
+    """
+    cache: OrderedDict[str, rasterio.DatasetReader] = getattr(
+        _thread_local, "dem_cache", None
+    )
+    if cache is None:
+        cache = OrderedDict()
+        _thread_local.dem_cache = cache
+
     path_str = str(dem_path)
-    if path_str not in _dem_dataset_cache:
-        _dem_dataset_cache[path_str] = rasterio.open(dem_path)
-    return _dem_dataset_cache[path_str]
+    if path_str in cache:
+        cache.move_to_end(path_str)
+        return cache[path_str]
+
+    ds = rasterio.open(dem_path)
+    cache[path_str] = ds
+
+    # Evict oldest entry when the cache exceeds the limit
+    while len(cache) > _MAX_CACHED_DATASETS:
+        _, evicted = cache.popitem(last=False)
+        try:
+            evicted.close()
+        except Exception:
+            pass
+
+    return ds
+
+
+def close_dem_cache() -> None:
+    """Close all cached DEM handles across all threads that registered one.
+
+    Call this during application shutdown to release file descriptors eagerly.
+    For the *current* thread this always works; other threads' ``local()``
+    storage is only reachable if they are still alive and joinable.
+    """
+    cache: Optional[OrderedDict] = getattr(_thread_local, "dem_cache", None)
+    if cache is not None:
+        for ds in cache.values():
+            try:
+                ds.close()
+            except Exception:
+                pass
+        cache.clear()
 
 
 def _get_dem_path(lat: float, lon: float) -> Optional[Path]:
