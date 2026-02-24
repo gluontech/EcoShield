@@ -9,10 +9,11 @@ FIX v3.2 (Gap O): Added slope and aspect calculation for landslide/flood modelin
 FIX v3.2 (Gap R): Added @validate_no_nan decorators and fill-value handling.
 """
 
+import asyncio
 import logging
 import math
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 
 import numpy as np
 import rasterio
@@ -29,6 +30,18 @@ from src.data.validation import validate_no_nan, DataQualityWarning
 logger = logging.getLogger(__name__)
 
 DEM_PATH = Path(settings.COPERNICUS_DEM_LOCAL_CACHE)
+
+# Cache rasterio dataset handles to avoid repeated file open/close
+# All buildings in the same 1x1 degree area use the same DEM tile
+_dem_dataset_cache: Dict[str, rasterio.DatasetReader] = {}
+
+
+def _get_cached_dataset(dem_path: Path) -> rasterio.DatasetReader:
+    """Return a cached rasterio dataset, opening it on first access."""
+    path_str = str(dem_path)
+    if path_str not in _dem_dataset_cache:
+        _dem_dataset_cache[path_str] = rasterio.open(dem_path)
+    return _dem_dataset_cache[path_str]
 
 
 def _get_dem_path(lat: float, lon: float) -> Optional[Path]:
@@ -54,47 +67,42 @@ def _get_dem_path(lat: float, lon: float) -> Optional[Path]:
     return path
 
 
-@validate_no_nan
-async def get_elevation(lat: float, lon: float) -> float:
-    """
-    Get elevation at a specific point using bilinear interpolation.
-    """
+def _read_elevation_sync(lat: float, lon: float) -> float:
+    """Synchronous elevation read using cached DEM dataset."""
     dem_path = _get_dem_path(lat, lon)
     if not dem_path:
         logger.warning(f"DEM tile not found for {lat}, {lon}")
-        return 0.0  # Fallback to sea level if missing (risky but MVP)
+        return 0.0
 
     try:
-        with rasterio.open(dem_path) as src:
-            # Sample using rasterio (handles appropriate window reading)
-            # transform ~ returns pixel coords from world coords
-            row, col = src.index(lon, lat)
-            
-            # Read a small window (2x2) for bilinear interpolation
-            # Clamp to bounds
-            h = src.height
-            w = src.width
-            
-            # Simple nearest neighbor for MVP if we want speed,
-            # but bilinear is better.
-            # Using verify_no_nan we should ensure we don't return nodata
-            
-            # Read 1 pixel (Nearest)
-            window = Window(col, row, 1, 1)
-            val = src.read(1, window=window)
-            
-            elevation = float(val[0][0])
-            
-            # Check nodata
-            if elevation == src.nodata or elevation < -1000:
-                logger.warning(f"Nodata value {elevation} at {lat}, {lon}")
-                return 0.0
-                
-            return elevation
-            
+        src = _get_cached_dataset(dem_path)
+        row, col = src.index(lon, lat)
+
+        window = Window(col, row, 1, 1)
+        val = src.read(1, window=window)
+
+        elevation = float(val[0][0])
+
+        if elevation == src.nodata or elevation < -1000:
+            logger.warning(f"Nodata value {elevation} at {lat}, {lon}")
+            return 0.0
+
+        return elevation
+
     except Exception as e:
         logger.error(f"Error reading DEM {dem_path}: {e}")
         return 0.0
+
+
+@validate_no_nan
+async def get_elevation(lat: float, lon: float) -> float:
+    """
+    Get elevation at a specific point.
+
+    Uses cached DEM file handles and runs blocking I/O in a thread pool
+    so concurrent calls from asyncio.gather() execute in parallel.
+    """
+    return await asyncio.to_thread(_read_elevation_sync, lat, lon)
 
 
 @validate_no_nan

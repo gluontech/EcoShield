@@ -13,7 +13,7 @@ Combined with hazard intensity and vulnerability curves, they enable
 structure-level damage estimation (HxE×V per building).
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from datetime import datetime
 from pydantic import BaseModel, Field, computed_field
 from .enums import (
@@ -54,7 +54,11 @@ class BuildingFootprint(BaseModel):
     osm_id: Optional[str] = Field(None, description="OpenStreetMap way/relation ID if from OSM")
     name: Optional[str] = Field(None, description="Building name (usually from OSM/Overture)")
     address: Optional[str] = Field(None, description="Building address")
-    
+    name_aliases: List[str] = Field(
+        default_factory=list,
+        description="Alternate names in other languages (from Overture names.common)"
+    )
+
     model_config = {"arbitrary_types_allowed": True}
 
 
@@ -93,11 +97,17 @@ class BuildingHeight(BaseModel):
         ge=0, le=1,
         description="Building presence probability for this year"
     )
-    
+    num_floors: Optional[int] = Field(
+        None, ge=1, le=200,
+        description="Actual floor count from Overture/OSM (takes priority over height estimation)"
+    )
+
     @computed_field
     @property
     def estimated_stories(self) -> int:
-        """Estimate number of stories (3.0m per story for SEA buildings)."""
+        """Number of stories: prefer actual num_floors, else estimate from height."""
+        if self.num_floors:
+            return self.num_floors
         return max(1, round(self.height_m / 3.0))
 
 

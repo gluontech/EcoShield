@@ -1,6 +1,9 @@
 
+import asyncio
 import logging
 from typing import Dict, Any, List
+
+from unidecode import unidecode
 
 from src.core.models.geometry import BoundingBox
 from src.core.models.surface import BuildingAdjustedSurface
@@ -10,6 +13,27 @@ from src.data.elevation import get_elevation
 from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _transliterate(text: str) -> str:
+    """Transliterate any Unicode script to lowercase ASCII for matching.
+
+    Handles Vietnamese diacritics, Thai, Chinese, Arabic, etc. via unidecode.
+    """
+    return unidecode(text).lower().strip()
+
+
+def _token_overlap_score(a: str, b: str) -> float:
+    """Fraction of the shorter string's tokens found in the longer string.
+
+    Returns 0.0–1.0.  A score >= 0.5 indicates a likely match.
+    """
+    tokens_a = set(a.split())
+    tokens_b = set(b.split())
+    if not tokens_a or not tokens_b:
+        return 0.0
+    intersection = tokens_a & tokens_b
+    return len(intersection) / min(len(tokens_a), len(tokens_b))
 
 
 async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -55,7 +79,6 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
     async def fetch_overture(search_bbox):
         try:
             from src.data.overture_buildings import OvertureBuildingsSource
-            import asyncio
             overture_source = OvertureBuildingsSource()
             raw_buildings = await asyncio.to_thread(overture_source.query_buildings, bbox=search_bbox)
             if raw_buildings:
@@ -117,17 +140,40 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
         s._distance = dist
         
         # --- Metadata Matching Bonus ---
+        # Use unidecode transliteration so Thai/Chinese/Arabic/Vietnamese
+        # names are converted to ASCII before comparison.
         matched_bonus = 0.0
-        b_name = (getattr(s.footprint, 'name', '') or "").lower()
-        b_addr = (getattr(s.footprint, 'address', '') or "").lower()
-        
-        # Exact/Substring match for Name
-        if req_name and b_name and (req_name in b_name or b_name in req_name):
+        b_name_raw = (getattr(s.footprint, 'name', '') or "")
+        b_addr_raw = (getattr(s.footprint, 'address', '') or "")
+        b_aliases_raw = [a for a in getattr(s.footprint, 'name_aliases', []) if a]
+
+        # Transliterate everything to ASCII for cross-script matching
+        req_name_t = _transliterate(req_name) if req_name else ""
+        req_addr_t = _transliterate(req_address) if req_address else ""
+        b_name_t = _transliterate(b_name_raw) if b_name_raw else ""
+        b_addr_t = _transliterate(b_addr_raw) if b_addr_raw else ""
+        b_alias_ts = [_transliterate(a) for a in b_aliases_raw]
+
+        # Name matching: substring check + token overlap on transliterated text
+        name_matched = False
+        if req_name_t and b_name_t:
+            if (req_name_t in b_name_t or b_name_t in req_name_t
+                    or _token_overlap_score(req_name_t, b_name_t) >= 0.5):
+                name_matched = True
+        if not name_matched and req_name_t:
+            for alias_t in b_alias_ts:
+                if (req_name_t in alias_t or alias_t in req_name_t
+                        or _token_overlap_score(req_name_t, alias_t) >= 0.5):
+                    name_matched = True
+                    break
+        if name_matched:
             matched_bonus += 200.0  # Massive bonus for matching name
-            
-        # Exact/Substring match for Address
-        if req_address and b_addr and (req_address in b_addr or b_addr in req_address):
-            matched_bonus += 100.0
+
+        # Address matching: substring check + token overlap on transliterated text
+        if req_addr_t and b_addr_t:
+            if (req_addr_t in b_addr_t or b_addr_t in req_addr_t
+                    or _token_overlap_score(req_addr_t, b_addr_t) >= 0.5):
+                matched_bonus += 100.0
             
         if shapely_available:
             try:
@@ -184,26 +230,21 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
     # We need ground elevation for each building centroid.
     # OpenBuildingsSource provides height_m (building height), not ground elevation.
     # So we fetch ground elevation from DEM.
-    
-    surfaces = {}
-    for b in structures:
-        # Use simple centroid lookup. For optimization, we could batch this
-        # or use a raster sampling method if get_elevation supported it.
-        # For now, per-building await is slow but correct for MVP.
-        # Ideally get_elevation should be cached or local.
-        centroid = b.footprint.centroid
-        
-        # Note: In a high-concurrency event loop, calling get_elevation in a loop 
-        # is okay if it's fast (local COG). 
-        # Only fetch if we have buildings
-        ground_elev = await get_elevation(centroid.lat, centroid.lon)
-        
-        bid = b.footprint.building_id
-        surfaces[bid] = BuildingAdjustedSurface(
+
+    async def _fetch_elev(building):
+        centroid = building.footprint.centroid
+        elev = await get_elevation(centroid.lat, centroid.lon)
+        return building.footprint.building_id, elev
+
+    # Parallel elevation fetches — all buildings in same area share the same DEM tile
+    elev_results = await asyncio.gather(*[_fetch_elev(b) for b in structures])
+    surfaces = {
+        bid: BuildingAdjustedSurface(
             building_id=bid,
-            original_elevation_m=ground_elev,
-            # Subsidence will be populated in Step 1
+            original_elevation_m=elev,
         )
+        for bid, elev in elev_results
+    }
         
     data["building_cluster"] = cluster
     data["building_surfaces"] = surfaces
