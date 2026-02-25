@@ -76,13 +76,21 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
         max_lon=lon + delta_deg
     )
     
-    async def fetch_overture(search_bbox):
+    async def fetch_overture(search_bbox, enrich_places=False):
         try:
             from src.data.overture_buildings import OvertureBuildingsSource
             overture_source = OvertureBuildingsSource()
             raw_buildings = await asyncio.to_thread(overture_source.query_buildings, bbox=search_bbox)
             if raw_buildings:
                 enriched = overture_source.enrich_with_osm_tags(raw_buildings)
+                # When name/address provided, also query places theme for address data
+                if enrich_places:
+                    try:
+                        places = await asyncio.to_thread(overture_source.query_places, bbox=search_bbox)
+                        if places:
+                            enriched = overture_source.enrich_buildings_with_places(enriched, places)
+                    except Exception as e:
+                        logger.warning(f"Overture places enrichment failed (non-fatal): {e}")
                 return overture_source.to_structural_characteristics(enriched)
         except Exception as e:
             logger.error(f"Overture Maps fetch failed: {e}")
@@ -95,7 +103,7 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
     # we MUST use Overture Maps first because Google Open Buildings lacks metadata.
     if req_name or req_address:
         logger.info("Name/address provided. Prioritizing Overture Maps for metadata matching.")
-        structures = await fetch_overture(bbox)
+        structures = await fetch_overture(bbox, enrich_places=True)
         overture_tried = True
 
     # 2. Fetch from default source (Google) if we haven't found anything yet
