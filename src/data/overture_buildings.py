@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 # Overture Maps S3 paths (no auth required)
 OVERTURE_S3_BASE = f"s3://{settings.OVERTURE_S3_BUCKET}/release/2026-01-21.0"
 OVERTURE_BUILDINGS_PATH = f"{OVERTURE_S3_BASE}/theme=buildings/type=building/"
+OVERTURE_PLACES_PATH = f"{OVERTURE_S3_BASE}/theme=places/type=place/"
 
 # OSM building:material → EcoShield material mapping
 OSM_MATERIAL_MAP: Dict[str, BuildingMaterial] = {
@@ -111,8 +112,7 @@ class OvertureBuildingsSource:
             class,
             subtype,
             sources,
-            names,
-            addresses
+            names
         FROM read_parquet('{OVERTURE_BUILDINGS_PATH}*.parquet', hive_partitioning=1)
         WHERE bbox.xmin >= {bbox.min_lon}
           AND bbox.xmax <= {bbox.max_lon}
@@ -124,14 +124,140 @@ class OvertureBuildingsSource:
         try:
             result = self.conn.execute(query).fetchall()
             columns = ['id', 'geometry_wkt', 'area_m2', 'centroid_lat', 'centroid_lon',
-                        'height', 'num_floors', 'class', 'subtype', 'sources', 'names',
-                        'addresses']
+                        'height', 'num_floors', 'class', 'subtype', 'sources', 'names']
             
             return [dict(zip(columns, row)) for row in result]
         except Exception as e:
             logger.error(f"DuckDB query failed: {e}")
             return []
     
+    def query_places(
+        self,
+        bbox: BoundingBox,
+        limit: int = 500,
+    ) -> List[Dict[str, Any]]:
+        """
+        Query Overture places (POIs) for address + name enrichment.
+
+        The places theme (theme=places/type=place) contains addresses and
+        richer name data that the buildings theme lacks.
+        """
+        query = f"""
+        SELECT
+            id,
+            ST_Y(ST_Centroid(geometry)) AS centroid_lat,
+            ST_X(ST_Centroid(geometry)) AS centroid_lon,
+            names,
+            addresses,
+            categories
+        FROM read_parquet('{OVERTURE_PLACES_PATH}*.parquet', hive_partitioning=1)
+        WHERE bbox.xmin >= {bbox.min_lon}
+          AND bbox.xmax <= {bbox.max_lon}
+          AND bbox.ymin >= {bbox.min_lat}
+          AND bbox.ymax <= {bbox.max_lat}
+        LIMIT {limit}
+        """
+
+        try:
+            result = self.conn.execute(query).fetchall()
+            columns = ['id', 'centroid_lat', 'centroid_lon', 'names',
+                        'addresses', 'categories']
+            return [dict(zip(columns, row)) for row in result]
+        except Exception as e:
+            logger.warning(f"Overture places query failed: {e}")
+            return []
+
+    def enrich_buildings_with_places(
+        self,
+        buildings: List[Dict[str, Any]],
+        places: List[Dict[str, Any]],
+        max_distance_m: float = 30.0,
+    ) -> List[Dict[str, Any]]:
+        """
+        Match nearby places to buildings to add address + name data.
+
+        For each building, find the closest place within max_distance_m and
+        copy its address and any missing name aliases.
+        """
+        import math
+
+        def _haversine(lat1, lon1, lat2, lon2):
+            R = 6371000
+            dlat = math.radians(lat2 - lat1)
+            dlon = math.radians(lon2 - lon1)
+            a = (math.sin(dlat / 2) ** 2
+                 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+                 * math.sin(dlon / 2) ** 2)
+            return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+        # Pre-extract place data
+        parsed_places = []
+        for p in places:
+            pdata = {
+                'lat': p.get('centroid_lat', 0),
+                'lon': p.get('centroid_lon', 0),
+            }
+
+            # Parse address
+            addrs = p.get('addresses')
+            if addrs and isinstance(addrs, list) and len(addrs) > 0:
+                addr_node = addrs[0]
+                parts = []
+                if isinstance(addr_node, dict):
+                    if addr_node.get('freeform'):
+                        parts.append(addr_node['freeform'])
+                    else:
+                        for k in ['housenumber', 'street', 'city']:
+                            if addr_node.get(k):
+                                parts.append(addr_node[k])
+                pdata['address'] = ", ".join(parts) if parts else None
+            else:
+                pdata['address'] = None
+
+            # Parse names
+            pnames = p.get('names')
+            pdata['name_primary'] = None
+            pdata['name_aliases'] = []
+            if pnames and isinstance(pnames, dict):
+                pdata['name_primary'] = pnames.get('primary', '')
+                common = pnames.get('common')
+                if common and isinstance(common, dict):
+                    pdata['name_aliases'] = [v for v in common.values() if v]
+
+            parsed_places.append(pdata)
+
+        # Match each building to the closest place
+        for b in buildings:
+            blat = b.get('centroid_lat', 0)
+            blon = b.get('centroid_lon', 0)
+
+            best_place = None
+            best_dist = max_distance_m + 1
+
+            for pp in parsed_places:
+                d = _haversine(blat, blon, pp['lat'], pp['lon'])
+                if d < best_dist:
+                    best_dist = d
+                    best_place = pp
+
+            if best_place and best_dist <= max_distance_m:
+                # Fill address from place if building has none
+                if not b.get('address_primary') and best_place['address']:
+                    b['address_primary'] = best_place['address']
+
+                # Merge name aliases from place
+                existing = set(b.get('name_aliases', []))
+                for alias in best_place.get('name_aliases', []):
+                    if alias and alias not in existing:
+                        b.setdefault('name_aliases', []).append(alias)
+                        existing.add(alias)
+
+                # Fill primary name from place if building has none
+                if not b.get('name_primary') and best_place.get('name_primary'):
+                    b['name_primary'] = best_place['name_primary']
+
+        return buildings
+
     def enrich_with_osm_tags(
         self,
         buildings: List[Dict[str, Any]]
@@ -172,19 +298,10 @@ class OvertureBuildingsSource:
                     b['name_aliases'] = [v for v in common.values() if v]
             elif b.get('names') and isinstance(b['names'], str):
                 b['name_primary'] = b['names']
-            
-            # Extract address (often freeform in OSM context, but duckdb returns it as a dict/list of parts sometimes)
-            if b.get('addresses') and isinstance(b['addresses'], list) and len(b['addresses']) > 0:
-                address_node = b['addresses'][0]
-                addr_parts = []
-                if isinstance(address_node, dict):
-                    if address_node.get('freeform'):
-                        addr_parts.append(address_node.get('freeform'))
-                    else:
-                        for k in ['housenumber', 'street', 'city']:
-                            if address_node.get(k): addr_parts.append(address_node[k])
-                b['address_primary'] = ", ".join(addr_parts) if addr_parts else ''
-        
+
+            # Note: addresses come from Overture places theme (via enrich_buildings_with_places),
+            # NOT from the buildings theme which lacks an 'addresses' column.
+
         return buildings
     
     def to_structural_characteristics(
