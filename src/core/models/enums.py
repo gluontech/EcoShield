@@ -121,6 +121,11 @@ class StructureType(str, Enum):
 
     Each type has expected physical characteristics (area, height, floors)
     used by the spatial matcher QA step to reject implausible matches.
+
+    Includes CONVERTED_* composite types for SEA adaptive reuse where
+    function diverges from physical form (e.g. tube house operating as
+    boutique hotel in Hanoi Old Quarter). These use the physical envelope
+    for spatial matching but the commercial function for vulnerability/value.
     """
     # Residential
     TUBE_HOUSE = "tube_house"                    # Vietnamese nhà ống, narrow 3-4m wide
@@ -141,3 +146,15 @@ class StructureType(str, Enum):
     # Industrial
     FACTORY = "factory"
     WAREHOUSE = "warehouse"
+
+    # Adaptive reuse — commercial function in residential/industrial envelope.
+    # Common in Hanoi Old Quarter, HCMC District 1, Hội An ancient town,
+    # Bangkok Chinatown, Manila Intramuros, Jakarta Kota Tua.
+    # Spatial QA uses the PHYSICAL form; vulnerability/value uses the FUNCTION.
+    CONVERTED_TUBE_HOUSE_HOTEL = "converted_tube_house_hotel"
+    CONVERTED_TUBE_HOUSE_SHOP = "converted_tube_house_shop"
+    CONVERTED_TUBE_HOUSE_RESTAURANT = "converted_tube_house_restaurant"
+    CONVERTED_VILLA_HOTEL = "converted_villa_hotel"
+    CONVERTED_VILLA_RESTAURANT = "converted_villa_restaurant"
+    CONVERTED_SHOPHOUSE_HOTEL = "converted_shophouse_hotel"
+    CONVERTED_WAREHOUSE_COMMERCIAL = "converted_warehouse_commercial"

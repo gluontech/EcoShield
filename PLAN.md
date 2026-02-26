@@ -58,6 +58,7 @@ Location:
                   apartment_building, informal_settlement
     commercial  → hotel, shopping_mall, bank, gym, office_building,
                   retail_shop, restaurant
+                  + CONVERTED_* adaptive reuse types (see below)
     industrial  → factory, warehouse
 ```
 
@@ -67,6 +68,44 @@ for area, height, and floor count. The spatial matcher uses these to:
 2. **Reject mismatches** (Stage 6): hotel matched to 40m² building → flag → expand → retry
 3. **Set adaptive buffer** (Stage 2): mall/hotel → 10m buffer; tube_house → 3m buffer
 4. **Infer height similarity** (Stage 3): expected height from type ranges, not hardcoded
+
+### Adaptive Reuse: CONVERTED_* Types (NEW)
+
+In dense SEA historic quarters, residential/industrial structures are commonly
+converted to commercial use without changing the physical envelope. A 4m×15m
+tube house operating as a boutique hotel in Hanoi Old Quarter would fail the
+standard `HOTEL` expectation (min 200m²). CONVERTED_* types solve this:
+
+```
+CONVERTED_TUBE_HOUSE_HOTEL      → spatial QA uses tube_house envelope (15-80m²)
+CONVERTED_TUBE_HOUSE_SHOP       → spatial QA uses tube_house envelope
+CONVERTED_TUBE_HOUSE_RESTAURANT → spatial QA uses tube_house envelope
+CONVERTED_VILLA_HOTEL           → spatial QA uses single_dwelling envelope (100-500m²)
+CONVERTED_VILLA_RESTAURANT      → spatial QA uses single_dwelling envelope
+CONVERTED_SHOPHOUSE_HOTEL       → spatial QA uses multistory_dwelling envelope (30-150m²)
+CONVERTED_WAREHOUSE_COMMERCIAL  → spatial QA uses warehouse envelope (200-30000m²)
+```
+
+**Dual interpretation**: The spatial matcher uses the physical form for QA
+(plausibility scoring against the building envelope), while the vulnerability
+and value assessment uses the commercial occupancy.
+
+**Regional Override Zones**: For standard commercial types (e.g. `HOTEL` not
+`CONVERTED_TUBE_HOUSE_HOTEL`), the QA step applies a leniency multiplier
+(1.4–1.5x) when the query point falls inside a known conversion zone:
+- Hanoi Old Quarter (Hoàn Kiếm) — 1.5x
+- HCMC District 1 backpacker area (Bùi Viện) — 1.5x
+- HCMC District 3 villa quarter — 1.4x
+- Hội An Ancient Town — 1.5x
+- Bangkok Chinatown (Yaowarat) — 1.5x
+- Bangkok Khao San Road — 1.4x
+- Manila Intramuros — 1.4x
+- Jakarta Kota Tua — 1.4x
+
+This means: if a user declares `structure_type=hotel` at a point inside Hanoi
+Old Quarter, and the best match is a 60m² tube house, the plausibility score
+is multiplied by 1.5x before the rejection threshold check — allowing the
+match to pass QA without requiring the user to know about CONVERTED_* types.
 
 ---
 
@@ -347,13 +386,17 @@ Replaces the free-text `asset_type` on `PortfolioSite` (now deprecated).
 
 **SEA-calibrated physical characteristics per StructureType:**
 - `StructureExpectation` dataclass: min/max area, height, floors + `plausibility_score()` method
-- `STRUCTURE_EXPECTATIONS` dict: 14 entries (5 residential, 7 commercial, 2 industrial)
+- `STRUCTURE_EXPECTATIONS` dict: 21 entries (5 residential, 7 commercial, 7 converted, 2 industrial)
 - `CATEGORY_EXPECTATIONS` dict: broad fallback ranges when only category is provided
 - `get_expectation(type, category)` → resolves best available expectation
+- `AdaptiveReuseZone` dataclass + `ADAPTIVE_REUSE_ZONES` list: 8 SEA zones with leniency factors
+- `get_zone_leniency(lat, lon)` → returns multiplier (1.0 outside zones, 1.4–1.5 inside)
+- `CONVERTED_TYPES` dict + `is_converted_type()` / `get_physical_form()` helpers
 
 ### 8. MODIFY: `src/core/models/enums.py` (DONE)
 
 **Added `StructureCategory` and `StructureType` enums** for typed API input.
+`StructureType` includes 7 CONVERTED_* values for adaptive reuse.
 
 ---
 

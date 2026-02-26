@@ -24,6 +24,14 @@ CATEGORY_TYPES = {
         StructureType.OFFICE_BUILDING,
         StructureType.RETAIL_SHOP,
         StructureType.RESTAURANT,
+        # Adaptive reuse: commercial function in residential/industrial envelope
+        StructureType.CONVERTED_TUBE_HOUSE_HOTEL,
+        StructureType.CONVERTED_TUBE_HOUSE_SHOP,
+        StructureType.CONVERTED_TUBE_HOUSE_RESTAURANT,
+        StructureType.CONVERTED_VILLA_HOTEL,
+        StructureType.CONVERTED_VILLA_RESTAURANT,
+        StructureType.CONVERTED_SHOPHOUSE_HOTEL,
+        StructureType.CONVERTED_WAREHOUSE_COMMERCIAL,
     },
     StructureCategory.INDUSTRIAL: {
         StructureType.FACTORY,

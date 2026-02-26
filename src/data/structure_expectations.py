@@ -9,10 +9,25 @@ Thai shophouses, Philippine informal settlements, Singapore HDB blocks.
 Each entry defines the plausible range for area, height, and floor count.
 A candidate building that falls outside these ranges is flagged as a
 mismatch and triggers a retry with expanded search buffer.
+
+Adaptive Reuse (CONVERTED_* types):
+    In dense SEA historic quarters, residential structures are commonly
+    converted to commercial use without changing the physical envelope:
+    - Hanoi Old Quarter (Hoàn Kiếm): tube houses → boutique hotels, cafés
+    - HCMC District 1/3: villas → restaurants, galleries
+    - Hội An ancient town: shophouses → hotels, tailor shops
+    - Bangkok Chinatown (Yaowarat): shophouses → hostels
+    - Manila Intramuros: heritage houses → hotels
+    - Jakarta Kota Tua: warehouses → cafés, co-working
+
+    For these types, spatial QA uses the PHYSICAL form (tube house envelope)
+    while vulnerability/value assessment uses the FUNCTION (commercial).
+    Regional override zones further loosen plausibility thresholds in known
+    conversion-heavy areas.
 """
 
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Tuple
 
 from src.core.models.enums import (
     StructureCategory,
@@ -202,7 +217,164 @@ STRUCTURE_EXPECTATIONS: Dict[StructureType, StructureExpectation] = {
         min_floors=1, max_floors=2,
         expected_occupancy=BuildingOccupancy.INDUSTRIAL,
     ),
+
+    # ── Adaptive Reuse (CONVERTED_*) ────────────────────────
+    # Physical form = residential/industrial envelope.
+    # Function = commercial (occupancy is COMMERCIAL for vulnerability/value).
+
+    StructureType.CONVERTED_TUBE_HOUSE_HOTEL: StructureExpectation(
+        category=StructureCategory.COMMERCIAL,
+        min_area_m2=15, max_area_m2=80,      # tube house physical envelope
+        min_height_m=9, max_height_m=21,      # often add rooftop floor
+        min_floors=3, max_floors=7,
+        expected_occupancy=BuildingOccupancy.COMMERCIAL,
+    ),
+    StructureType.CONVERTED_TUBE_HOUSE_SHOP: StructureExpectation(
+        category=StructureCategory.COMMERCIAL,
+        min_area_m2=15, max_area_m2=80,
+        min_height_m=9, max_height_m=18,
+        min_floors=3, max_floors=6,
+        expected_occupancy=BuildingOccupancy.COMMERCIAL,
+    ),
+    StructureType.CONVERTED_TUBE_HOUSE_RESTAURANT: StructureExpectation(
+        category=StructureCategory.COMMERCIAL,
+        min_area_m2=15, max_area_m2=80,
+        min_height_m=9, max_height_m=18,
+        min_floors=3, max_floors=6,
+        expected_occupancy=BuildingOccupancy.COMMERCIAL,
+    ),
+    StructureType.CONVERTED_VILLA_HOTEL: StructureExpectation(
+        category=StructureCategory.COMMERCIAL,
+        min_area_m2=100, max_area_m2=500,     # colonial/French villa envelope
+        min_height_m=6, max_height_m=15,
+        min_floors=2, max_floors=4,
+        expected_occupancy=BuildingOccupancy.COMMERCIAL,
+    ),
+    StructureType.CONVERTED_VILLA_RESTAURANT: StructureExpectation(
+        category=StructureCategory.COMMERCIAL,
+        min_area_m2=100, max_area_m2=500,
+        min_height_m=6, max_height_m=15,
+        min_floors=2, max_floors=4,
+        expected_occupancy=BuildingOccupancy.COMMERCIAL,
+    ),
+    StructureType.CONVERTED_SHOPHOUSE_HOTEL: StructureExpectation(
+        category=StructureCategory.COMMERCIAL,
+        min_area_m2=30, max_area_m2=150,      # Thai/Chinese shophouse
+        min_height_m=6, max_height_m=15,
+        min_floors=2, max_floors=4,
+        expected_occupancy=BuildingOccupancy.COMMERCIAL,
+    ),
+    StructureType.CONVERTED_WAREHOUSE_COMMERCIAL: StructureExpectation(
+        category=StructureCategory.COMMERCIAL,
+        min_area_m2=200, max_area_m2=30000,   # warehouse envelope
+        min_height_m=5, max_height_m=15,
+        min_floors=1, max_floors=2,
+        expected_occupancy=BuildingOccupancy.COMMERCIAL,
+    ),
 }
+
+
+# ── Adaptive Reuse Override Zones ───────────────────────────
+# In these bounding boxes, the spatial matcher QA step loosens
+# plausibility thresholds for commercial types that would normally
+# fail against small residential footprints.
+#
+# Format: (name, min_lat, max_lat, min_lon, max_lon, loosened_types)
+# The matcher multiplies the plausibility_score by a leniency factor
+# (1.5x) when the query point falls inside one of these zones AND the
+# declared structure_type is a pure commercial type (not CONVERTED_*).
+
+@dataclass(frozen=True)
+class AdaptiveReuseZone:
+    """Geographic zone where commercial-in-residential conversion is common."""
+    name: str
+    city: str
+    min_lat: float
+    max_lat: float
+    min_lon: float
+    max_lon: float
+    leniency_factor: float  # multiply plausibility_score by this in the zone
+
+    def contains(self, lat: float, lon: float) -> bool:
+        return (self.min_lat <= lat <= self.max_lat
+                and self.min_lon <= lon <= self.max_lon)
+
+
+ADAPTIVE_REUSE_ZONES: List[AdaptiveReuseZone] = [
+    # Vietnam
+    AdaptiveReuseZone(
+        name="Hanoi Old Quarter (Hoàn Kiếm)",
+        city="hanoi",
+        min_lat=21.028, max_lat=21.040,
+        min_lon=105.847, max_lon=105.858,
+        leniency_factor=1.5,
+    ),
+    AdaptiveReuseZone(
+        name="Hội An Ancient Town",
+        city="danang",  # nearest supported city
+        min_lat=15.875, max_lat=15.885,
+        min_lon=108.325, max_lon=108.340,
+        leniency_factor=1.5,
+    ),
+    AdaptiveReuseZone(
+        name="HCMC District 1 backpacker area (Bùi Viện / Phạm Ngũ Lão)",
+        city="hcmc",
+        min_lat=10.766, max_lat=10.772,
+        min_lon=106.690, max_lon=106.698,
+        leniency_factor=1.5,
+    ),
+    AdaptiveReuseZone(
+        name="HCMC District 3 villa quarter",
+        city="hcmc",
+        min_lat=10.776, max_lat=10.790,
+        min_lon=106.676, max_lon=106.692,
+        leniency_factor=1.4,
+    ),
+    # Thailand
+    AdaptiveReuseZone(
+        name="Bangkok Chinatown (Yaowarat)",
+        city="bangkok",
+        min_lat=13.735, max_lat=13.745,
+        min_lon=100.505, max_lon=100.515,
+        leniency_factor=1.5,
+    ),
+    AdaptiveReuseZone(
+        name="Bangkok Khao San Road area",
+        city="bangkok",
+        min_lat=13.757, max_lat=13.766,
+        min_lon=100.494, max_lon=100.502,
+        leniency_factor=1.4,
+    ),
+    # Philippines
+    AdaptiveReuseZone(
+        name="Manila Intramuros",
+        city="manila",
+        min_lat=14.587, max_lat=14.596,
+        min_lon=120.970, max_lon=120.980,
+        leniency_factor=1.4,
+    ),
+    # Indonesia
+    AdaptiveReuseZone(
+        name="Jakarta Kota Tua (Old Town)",
+        city="jakarta",
+        min_lat=-6.138, max_lat=-6.128,
+        min_lon=106.808, max_lon=106.818,
+        leniency_factor=1.4,
+    ),
+]
+
+
+def get_zone_leniency(lat: float, lon: float) -> float:
+    """Return the leniency multiplier for a given point.
+
+    Returns 1.0 (no leniency) if the point is not in any override zone.
+    If inside multiple zones, returns the highest leniency factor.
+    """
+    max_leniency = 1.0
+    for zone in ADAPTIVE_REUSE_ZONES:
+        if zone.contains(lat, lon):
+            max_leniency = max(max_leniency, zone.leniency_factor)
+    return max_leniency
 
 
 # ── Category-level fallback ranges ──────────────────────────
@@ -247,3 +419,31 @@ def get_expectation(
     if structure_category and structure_category in CATEGORY_EXPECTATIONS:
         return CATEGORY_EXPECTATIONS[structure_category]
     return None
+
+
+# Types whose physical_form differs from their function.
+# The spatial matcher uses these to decide which expectation table to query:
+# - Spatial QA → uses CONVERTED_* expectation (physical envelope)
+# - Vulnerability/value → uses COMMERCIAL occupancy
+CONVERTED_TYPES: Dict[StructureType, StructureType] = {
+    StructureType.CONVERTED_TUBE_HOUSE_HOTEL: StructureType.TUBE_HOUSE,
+    StructureType.CONVERTED_TUBE_HOUSE_SHOP: StructureType.TUBE_HOUSE,
+    StructureType.CONVERTED_TUBE_HOUSE_RESTAURANT: StructureType.TUBE_HOUSE,
+    StructureType.CONVERTED_VILLA_HOTEL: StructureType.SINGLE_DWELLING,
+    StructureType.CONVERTED_VILLA_RESTAURANT: StructureType.SINGLE_DWELLING,
+    StructureType.CONVERTED_SHOPHOUSE_HOTEL: StructureType.MULTISTORY_DWELLING,
+    StructureType.CONVERTED_WAREHOUSE_COMMERCIAL: StructureType.WAREHOUSE,
+}
+
+
+def is_converted_type(structure_type: Optional[StructureType]) -> bool:
+    """Check whether a structure_type represents adaptive reuse."""
+    return structure_type is not None and structure_type in CONVERTED_TYPES
+
+
+def get_physical_form(structure_type: StructureType) -> StructureType:
+    """Return the underlying physical form for a converted type.
+
+    For non-converted types, returns the type itself.
+    """
+    return CONVERTED_TYPES.get(structure_type, structure_type)
