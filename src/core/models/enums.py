@@ -107,3 +107,37 @@ class VulnerabilityClass(str, Enum):
     CLASS_II_WOOD = "class_ii"        # Wood/bamboo/timber
     CLASS_III_MASONRY = "class_iii"   # Unreinforced masonry
     CLASS_IV_REINFORCED = "class_iv"  # Reinforced concrete/steel
+
+
+class StructureCategory(str, Enum):
+    """Top-level building category for spatial matching QA."""
+    RESIDENTIAL = "residential"
+    COMMERCIAL = "commercial"
+    INDUSTRIAL = "industrial"
+
+
+class StructureType(str, Enum):
+    """Specific structure type within a category.
+
+    Each type has expected physical characteristics (area, height, floors)
+    used by the spatial matcher QA step to reject implausible matches.
+    """
+    # Residential
+    TUBE_HOUSE = "tube_house"                    # Vietnamese nhà ống, narrow 3-4m wide
+    SINGLE_DWELLING = "single_dwelling"          # Detached / semi-detached house
+    MULTISTORY_DWELLING = "multistory_dwelling"  # Row houses, townhouses
+    APARTMENT_BUILDING = "apartment_building"    # Condos, HDB-style blocks
+    INFORMAL_SETTLEMENT = "informal_settlement"  # Slums, temporary structures
+
+    # Commercial
+    HOTEL = "hotel"
+    SHOPPING_MALL = "shopping_mall"
+    BANK = "bank"
+    GYM = "gym"
+    OFFICE_BUILDING = "office_building"
+    RETAIL_SHOP = "retail_shop"
+    RESTAURANT = "restaurant"
+
+    # Industrial
+    FACTORY = "factory"
+    WAREHOUSE = "warehouse"

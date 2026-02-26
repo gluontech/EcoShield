@@ -31,7 +31,7 @@ inlining its own distance/containment logic.
 ### Data Flow (After)
 
 ```
-(lat, lon, name, address, asset_type)
+(lat, lon, name, address, structure_category, structure_type)
     → OvertureBuildingsSource.query_buildings(bbox)          [existing]
     → OvertureBuildingsSource.query_building_parts(bbox)     [NEW - Step 4]
     → OvertureBuildingsSource.query_places(bbox)             [existing]
@@ -41,10 +41,32 @@ inlining its own distance/containment logic.
         → Stage 3: Confidence scoring & ranking
         → Stage 4: Building part preference
         → Stage 5: Vertical stacking resolution
-        → Stage 6: QA rejection + retry
+        → Stage 6: QA rejection + retry (uses StructureExpectation)
     → Return ranked list with footprint_match_confidence
     → elevation.py: footprint-based median sampling          [ENHANCED - Step 5]
 ```
+
+### Input Parameters for QA (NEW)
+
+The API accepts structured building type hints that drive the QA rejection step:
+
+```
+Location:
+  structure_category: residential | commercial | industrial
+  structure_type:     (validated against category)
+    residential → tube_house, single_dwelling, multistory_dwelling,
+                  apartment_building, informal_settlement
+    commercial  → hotel, shopping_mall, bank, gym, office_building,
+                  retail_shop, restaurant
+    industrial  → factory, warehouse
+```
+
+Each `StructureType` maps to a `StructureExpectation` with SEA-calibrated ranges
+for area, height, and floor count. The spatial matcher uses these to:
+1. **Score plausibility** (Stage 3): `StructureExpectation.plausibility_score(area, height, floors)`
+2. **Reject mismatches** (Stage 6): hotel matched to 40m² building → flag → expand → retry
+3. **Set adaptive buffer** (Stage 2): mall/hotel → 10m buffer; tube_house → 3m buffer
+4. **Infer height similarity** (Stage 3): expected height from type ranges, not hardcoded
 
 ---
 
@@ -67,9 +89,11 @@ class SpatialMatchResult:
     poi_validated: bool         # True if POI layer confirms building type
 
 class SpatialMatchContext:
-    name: str                   # requested building name
-    address: str                # requested address
-    asset_type: str             # "hotel", "commercial", etc.
+    name: str                           # requested building name
+    address: str                        # requested address
+    structure_category: Optional[StructureCategory]
+    structure_type: Optional[StructureType]
+    expectation: Optional[StructureExpectation]  # resolved via get_expectation()
     city: str
 
 class SpatialMatcher:
@@ -96,7 +120,10 @@ class SpatialMatcher:
 **Stage 2 — Buffer Intersection** (lines ~120–180)
 - If Stage 1 found 0 matches (point not inside any polygon):
   - Create 3m buffer around query point (Shapely `point.buffer(3m_in_degrees)`)
-  - Adaptive: if `context.name` suggests large building (hotel, mall), use 10m
+  - Adaptive buffer from structure_type:
+    - `shopping_mall`, `hotel`, `factory`, `warehouse`, `apartment_building` → 10m
+    - `tube_house`, `informal_settlement`, `retail_shop` → 3m
+    - No type provided → 5m default
   - `polygon.intersection(buffer)` for each candidate
   - Sort by intersection area descending
   - Take candidates with overlap > 0
@@ -118,10 +145,11 @@ class SpatialMatcher:
   - `containment`: 1.0 if point inside polygon, else 0.0
   - `overlap_ratio`: intersection_area / footprint_area (from Stage 2 buffer)
   - `distance_m`: haversine from point to polygon centroid
-  - `height_similarity`: 1.0 if no height context; else `1 - abs(expected - actual) / expected`
-    (expected derived from asset_type: hotel→30m, residential→9m, etc.)
-  - `footprint_plausibility`: 1.0 if area matches asset_type expectations;
-    0.3 if "hotel" but area < 100m²; sigmoid scaling
+  - `height_similarity`: 1.0 if no `context.expectation`; else derived from
+    `expectation.height_plausible(height_m)` — 1.0 if within range, smooth decay outside
+  - `footprint_plausibility`: `expectation.plausibility_score(area_m2, height_m, floors)`
+    from `structure_expectations.py`. Returns 0.0–1.0 based on how well the candidate's
+    physical dimensions match the declared StructureType. 0.5 (neutral) when no type provided.
 
 - Name/address matching applied as tie-breaker multiplier (not distance hack):
   - Name match: score *= 1.5
@@ -145,11 +173,15 @@ class SpatialMatcher:
   - Add 0.1 bonus to smaller-polygon candidates in scoring
 
 **Stage 6 — QA Rejection + Retry** (lines ~280–330)
-- After scoring, validate best match:
-  - If `area_m2 < 50` AND `context.name` contains "hotel"/"mall"/"tower" → flag mismatch
-  - If `num_stories < 2` AND `context.asset_type == "commercial"` → flag
-  - If `building_presence < 0.8` → flag
-  - If `footprint_match_confidence < 0.7` → flag
+- After scoring, validate best match using `context.expectation`:
+  - `expectation.plausibility_score(area, height, floors) < 0.3` → flag mismatch
+    Examples:
+    - `structure_type=hotel` but matched 40m² single-story → score ≈ 0.1 → reject
+    - `structure_type=tube_house` but matched 5000m² polygon → score ≈ 0.05 → reject
+    - `structure_type=apartment_building` but height=4m → score ≈ 0.2 → reject
+  - `building_presence < 0.8` → flag (building may not exist)
+  - `footprint_match_confidence < 0.7` → flag
+  - `expectation.expected_occupancy != matched_occupancy` → soft flag (warning, not rejection)
 - On mismatch:
   - Expand buffer to 30m → re-run Stage 2 with wider search
   - Re-score with Stage 3
@@ -301,29 +333,42 @@ poi_validated: bool = Field(
 )
 ```
 
-### 6. MODIFY: `src/api/schemas/requests.py` (~5 lines)
+### 6. MODIFY: `src/api/schemas/requests.py` (DONE)
 
-**Add `asset_type` to Location/AssessRequest** (if not already present):
+**Added `structure_category` and `structure_type` to Location:**
 ```python
-asset_type: Optional[str] = Field(
-    None,
-    description="Expected building type: hotel, commercial, residential, industrial"
-)
+structure_category: Optional[StructureCategory]   # residential, commercial, industrial
+structure_type: Optional[StructureType]            # hotel, tube_house, warehouse, etc.
 ```
-This enables plausibility checks in the confidence scoring model.
+Cross-validated: `structure_type` must belong to declared `structure_category`.
+Replaces the free-text `asset_type` on `PortfolioSite` (now deprecated).
+
+### 7. NEW: `src/data/structure_expectations.py` (DONE)
+
+**SEA-calibrated physical characteristics per StructureType:**
+- `StructureExpectation` dataclass: min/max area, height, floors + `plausibility_score()` method
+- `STRUCTURE_EXPECTATIONS` dict: 14 entries (5 residential, 7 commercial, 2 industrial)
+- `CATEGORY_EXPECTATIONS` dict: broad fallback ranges when only category is provided
+- `get_expectation(type, category)` → resolves best available expectation
+
+### 8. MODIFY: `src/core/models/enums.py` (DONE)
+
+**Added `StructureCategory` and `StructureType` enums** for typed API input.
 
 ---
 
 ## Implementation Order
 
-1. **`src/core/models/asset.py`** — Add new fields first (other modules depend on models)
-2. **`src/api/schemas/requests.py`** — Add `asset_type` parameter
-3. **`src/data/overture_buildings.py`** — Add `query_building_parts()` method
-4. **`src/data/spatial_matcher.py`** — NEW: Core matching engine (largest piece)
-5. **`src/workflows/steps/asset_fetch.py`** — Refactor to use SpatialMatcher
-6. **`src/data/elevation.py`** — Add footprint-based median elevation
+1. ~~`src/core/models/enums.py`~~ — StructureCategory + StructureType enums **[DONE]**
+2. ~~`src/api/schemas/requests.py`~~ — structure_category/type on Location **[DONE]**
+3. ~~`src/data/structure_expectations.py`~~ — Physical characteristics reference table **[DONE]**
+4. **`src/core/models/asset.py`** — Add footprint_match_confidence, match_method, poi_validated
+5. **`src/data/overture_buildings.py`** — Add `query_building_parts()` method
+6. **`src/data/spatial_matcher.py`** — NEW: Core matching engine (largest piece)
+7. **`src/workflows/steps/asset_fetch.py`** — Refactor to use SpatialMatcher
+8. **`src/data/elevation.py`** — Add footprint-based median elevation
 
-Steps 1-3 can be done first (foundation). Step 4 is the core work. Steps 5-6 integrate everything.
+Steps 1-3 are done. Step 4-5 are foundation. Step 6 is the core work. Steps 7-8 integrate everything.
 
 ---
 

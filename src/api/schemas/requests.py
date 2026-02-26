@@ -5,6 +5,31 @@ from typing import Optional, List
 from pydantic import BaseModel, Field, field_validator
 
 from src.core.models import SSPScenario
+from src.core.models.enums import StructureCategory, StructureType
+
+# Valid structure_type values per category — used for cross-validation
+CATEGORY_TYPES = {
+    StructureCategory.RESIDENTIAL: {
+        StructureType.TUBE_HOUSE,
+        StructureType.SINGLE_DWELLING,
+        StructureType.MULTISTORY_DWELLING,
+        StructureType.APARTMENT_BUILDING,
+        StructureType.INFORMAL_SETTLEMENT,
+    },
+    StructureCategory.COMMERCIAL: {
+        StructureType.HOTEL,
+        StructureType.SHOPPING_MALL,
+        StructureType.BANK,
+        StructureType.GYM,
+        StructureType.OFFICE_BUILDING,
+        StructureType.RETAIL_SHOP,
+        StructureType.RESTAURANT,
+    },
+    StructureCategory.INDUSTRIAL: {
+        StructureType.FACTORY,
+        StructureType.WAREHOUSE,
+    },
+}
 
 
 class Location(BaseModel):
@@ -14,6 +39,31 @@ class Location(BaseModel):
     name: Optional[str] = Field(None, description="Location label or building name")
     address: Optional[str] = Field(None, description="Physical address")
     description: Optional[str] = Field(None, description="Additional context or description of the asset")
+    structure_category: Optional[StructureCategory] = Field(
+        None,
+        description="Top-level building category: residential, commercial, industrial",
+    )
+    structure_type: Optional[StructureType] = Field(
+        None,
+        description="Specific structure type within category (e.g. hotel, tube_house, warehouse)",
+    )
+
+    @field_validator("structure_type")
+    @classmethod
+    def validate_structure_type_matches_category(cls, v, info):
+        """Ensure structure_type belongs to the declared category."""
+        if v is None:
+            return v
+        cat = info.data.get("structure_category")
+        if cat is None:
+            return v  # type without category is allowed (category will be inferred)
+        allowed = CATEGORY_TYPES.get(cat, set())
+        if v not in allowed:
+            raise ValueError(
+                f"structure_type '{v.value}' is not valid for category '{cat.value}'. "
+                f"Valid types: {sorted(t.value for t in allowed)}"
+            )
+        return v
 
 
 class AssessRequest(BaseModel):
@@ -89,7 +139,10 @@ class PortfolioSite(BaseModel):
         description="City key for this site (hcmc, hanoi, danang, jakarta, manila, bangkok, singapore)",
     )
     asset_value_usd: Optional[float] = Field(None, ge=0)
-    asset_type: Optional[str] = None
+    asset_type: Optional[str] = Field(
+        None,
+        description="Deprecated — use location.structure_category / structure_type instead",
+    )
 
 
 class PortfolioRequest(BaseModel):
