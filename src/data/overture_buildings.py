@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 # Overture Maps S3 paths (no auth required)
 OVERTURE_S3_BASE = f"s3://{settings.OVERTURE_S3_BUCKET}/release/2026-01-21.0"
 OVERTURE_BUILDINGS_PATH = f"{OVERTURE_S3_BASE}/theme=buildings/type=building/"
+OVERTURE_BUILDING_PARTS_PATH = f"{OVERTURE_S3_BASE}/theme=buildings/type=building_part/"
 OVERTURE_PLACES_PATH = f"{OVERTURE_S3_BASE}/theme=places/type=place/"
 
 # OSM building:material → EcoShield material mapping
@@ -131,6 +132,45 @@ class OvertureBuildingsSource:
             logger.error(f"DuckDB query failed: {e}")
             return []
     
+    def query_building_parts(
+        self,
+        bbox: BoundingBox,
+        limit: int = 10000,
+    ) -> List[Dict[str, Any]]:
+        """
+        Query Overture building_part polygons for complex structures.
+
+        Building parts represent subdivisions of a parent building (e.g.
+        podium vs tower). The spatial matcher prefers parts that contain
+        the query point over the parent building polygon.
+        """
+        query = f"""
+        SELECT
+            id,
+            ST_AsText(geometry) AS geometry_wkt,
+            ST_Area_Spheroid(geometry) AS area_m2,
+            ST_Y(ST_Centroid(geometry)) AS centroid_lat,
+            ST_X(ST_Centroid(geometry)) AS centroid_lon,
+            height,
+            num_floors,
+            building_id
+        FROM read_parquet('{OVERTURE_BUILDING_PARTS_PATH}*.parquet', hive_partitioning=1)
+        WHERE bbox.xmin >= {bbox.min_lon}
+          AND bbox.xmax <= {bbox.max_lon}
+          AND bbox.ymin >= {bbox.min_lat}
+          AND bbox.ymax <= {bbox.max_lat}
+        LIMIT {limit}
+        """
+
+        try:
+            result = self.conn.execute(query).fetchall()
+            columns = ['id', 'geometry_wkt', 'area_m2', 'centroid_lat', 'centroid_lon',
+                        'height', 'num_floors', 'building_id']
+            return [dict(zip(columns, row)) for row in result]
+        except Exception as e:
+            logger.warning(f"DuckDB building_part query failed (may not exist): {e}")
+            return []
+
     def query_places(
         self,
         bbox: BoundingBox,

@@ -152,6 +152,65 @@ async def get_elevation(lat: float, lon: float) -> float:
     return await asyncio.to_thread(_read_elevation_sync, lat, lon)
 
 
+def _read_elevation_footprint_sync(wkt_polygon: str) -> float:
+    """Sample median elevation across a building footprint polygon.
+
+    Instead of single-pixel at centroid, clips the DEM to the footprint
+    and returns the median of valid pixels.  Handles:
+    - Height raster misalignment (±5m shift at 30m resolution)
+    - Mixed pixel bleed at polygon edges
+    - DEM void fill (nodata pixels excluded from median)
+    """
+    try:
+        from shapely.wkt import loads as load_wkt
+        from rasterio.mask import mask as rio_mask
+    except ImportError:
+        logger.warning("shapely or rasterio.mask not available; falling back to centroid")
+        return 0.0
+
+    try:
+        poly = load_wkt(wkt_polygon)
+        centroid = poly.centroid
+    except Exception as e:
+        logger.warning(f"Could not parse WKT for footprint elevation: {e}")
+        return 0.0
+
+    dem_path = _get_dem_path(centroid.y, centroid.x)
+    if not dem_path:
+        return _read_elevation_sync(centroid.y, centroid.x)
+
+    try:
+        src = _get_cached_dataset(dem_path)
+        geojson = [poly.__geo_interface__]
+        out_image, _ = rio_mask(src, geojson, crop=True, nodata=src.nodata)
+
+        # Flatten and filter invalid values
+        valid = out_image.flatten()
+        if src.nodata is not None:
+            valid = valid[valid != src.nodata]
+        valid = valid[valid > -1000]
+
+        if len(valid) == 0:
+            # Polygon too small or falls on void — fallback to centroid
+            return _read_elevation_sync(centroid.y, centroid.x)
+
+        return float(np.median(valid))
+
+    except Exception as e:
+        logger.warning(f"Footprint elevation mask failed, falling back to centroid: {e}")
+        return _read_elevation_sync(centroid.y, centroid.x)
+
+
+@validate_no_nan
+async def get_elevation_footprint(wkt_polygon: str) -> float:
+    """Get median elevation across a building footprint polygon.
+
+    Falls back to centroid single-pixel sampling when the polygon is too
+    small or the mask returns no valid pixels.
+    """
+    return await asyncio.to_thread(_read_elevation_footprint_sync, wkt_polygon)
+
+
 @validate_no_nan
 async def get_slope(lat: float, lon: float) -> SlopeResult:
     """
