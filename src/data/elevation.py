@@ -12,6 +12,7 @@ FIX v3.2 (Gap R): Added @validate_no_nan decorators and fill-value handling.
 import asyncio
 import logging
 import math
+import re
 import threading
 from collections import OrderedDict
 from pathlib import Path
@@ -152,6 +153,22 @@ async def get_elevation(lat: float, lon: float) -> float:
     return await asyncio.to_thread(_read_elevation_sync, lat, lon)
 
 
+def _centroid_from_wkt(wkt_polygon: str) -> Optional[Tuple[float, float]]:
+    """Extract an approximate centroid (lat, lon) from a WKT POLYGON string.
+
+    Parses coordinate pairs without requiring shapely so the elevation
+    fallback path can work even when shapely is not installed.
+    Returns ``None`` if parsing fails.
+    """
+    # Match all "lon lat" coordinate pairs inside the WKT string.
+    pairs = re.findall(r"(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)", wkt_polygon)
+    if not pairs:
+        return None
+    lons = [float(p[0]) for p in pairs]
+    lats = [float(p[1]) for p in pairs]
+    return sum(lats) / len(lats), sum(lons) / len(lons)
+
+
 def _read_elevation_footprint_sync(wkt_polygon: str) -> float:
     """Sample median elevation across a building footprint polygon.
 
@@ -166,6 +183,9 @@ def _read_elevation_footprint_sync(wkt_polygon: str) -> float:
         from rasterio.mask import mask as rio_mask
     except ImportError:
         logger.warning("shapely or rasterio.mask not available; falling back to centroid")
+        centroid = _centroid_from_wkt(wkt_polygon)
+        if centroid is not None:
+            return _read_elevation_sync(centroid[0], centroid[1])
         return 0.0
 
     try:

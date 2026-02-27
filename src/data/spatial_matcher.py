@@ -455,9 +455,14 @@ class SpatialMatcher:
 
             pscore = exp.plausibility_score(area, height_m, floors)
 
-            # Apply zone leniency
-            leniency = get_zone_leniency(lat, lon)
-            pscore = min(pscore * leniency, 1.0)
+            # Apply zone leniency only for non-converted commercial types,
+            # matching the guard in _footprint_plausibility (Stage 3).
+            leniency = 1.0
+            if (context.structure_type
+                    and not is_converted_type(context.structure_type)
+                    and context.structure_category == StructureCategory.COMMERCIAL):
+                leniency = get_zone_leniency(lat, lon)
+                pscore = min(pscore * leniency, 1.0)
 
             if pscore < self.QA_PLAUSIBILITY_REJECT:
                 logger.info(
