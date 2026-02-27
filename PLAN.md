@@ -1,0 +1,442 @@
+# Multi-Stage Spatial Matching — Implementation Plan
+
+## Problem
+
+In dense SEA cities (HCMC, Jakarta, Bangkok, Manila), the current centroid-based building
+lookup is unreliable. Input `(lat, lon)` → find nearest centroid → return that footprint
+fails when:
+
+- Point falls near edge between adjacent polygons
+- Small building sits next to a large tower
+- Multi-part building geometries (podium + tower)
+- Overlapping footprints (vertical stacking)
+- Point offset 3–15m due to geocoding/GPS error
+
+**Current code flow:**
+1. `asset_fetch.py` computes a bounding box, fetches ALL buildings in bbox
+2. For each building: haversine distance to centroid, shapely containment check (sets dist=0),
+   name/address transliteration bonus (-200m/-100m)
+3. Sort by adjusted distance, return sorted list
+
+**No multi-stage fallback, no confidence scoring, no buffer intersection, no building parts.**
+
+---
+
+## Architecture Overview
+
+Create a new dedicated module `src/data/spatial_matcher.py` that encapsulates the full
+multi-stage matching pipeline. Refactor `asset_fetch.py` to call this module instead of
+inlining its own distance/containment logic.
+
+### Data Flow (After)
+
+```
+(lat, lon, name, address, structure_category, structure_type)
+    → OvertureBuildingsSource.query_buildings(bbox)          [existing]
+    → OvertureBuildingsSource.query_building_parts(bbox)     [NEW - Step 4]
+    → OvertureBuildingsSource.query_places(bbox)             [existing]
+    → SpatialMatcher.match(point, buildings, parts, places, context)  [NEW]
+        → Stage 1: Polygon containment + POI cross-check
+        → Stage 2: Buffer intersection (3m adaptive)
+        → Stage 3: Confidence scoring & ranking
+        → Stage 4: Building part preference
+        → Stage 5: Vertical stacking resolution
+        → Stage 6: QA rejection + retry (uses StructureExpectation)
+    → Return ranked list with footprint_match_confidence
+    → elevation.py: footprint-based median sampling          [ENHANCED - Step 5]
+```
+
+### Input Parameters for QA (NEW)
+
+The API accepts structured building type hints that drive the QA rejection step:
+
+```
+Location:
+  structure_category: residential | commercial | industrial
+  structure_type:     (validated against category)
+    residential → tube_house, single_dwelling, multistory_dwelling,
+                  apartment_building, informal_settlement
+    commercial  → hotel, shopping_mall, bank, gym, office_building,
+                  retail_shop, restaurant
+                  + CONVERTED_* adaptive reuse types (see below)
+    industrial  → factory, warehouse
+```
+
+Each `StructureType` maps to a `StructureExpectation` with SEA-calibrated ranges
+for area, height, and floor count. The spatial matcher uses these to:
+1. **Score plausibility** (Stage 3): `StructureExpectation.plausibility_score(area, height, floors)`
+2. **Reject mismatches** (Stage 6): hotel matched to 40m² building → flag → expand → retry
+3. **Set adaptive buffer** (Stage 2): mall/hotel → 10m buffer; tube_house → 3m buffer
+4. **Infer height similarity** (Stage 3): expected height from type ranges, not hardcoded
+
+### Adaptive Reuse: CONVERTED_* Types (NEW)
+
+In dense SEA historic quarters, residential/industrial structures are commonly
+converted to commercial use without changing the physical envelope. A 4m×15m
+tube house operating as a boutique hotel in Hanoi Old Quarter would fail the
+standard `HOTEL` expectation (min 200m²). CONVERTED_* types solve this:
+
+```
+CONVERTED_TUBE_HOUSE_HOTEL      → spatial QA uses tube_house envelope (15-80m²)
+CONVERTED_TUBE_HOUSE_SHOP       → spatial QA uses tube_house envelope
+CONVERTED_TUBE_HOUSE_RESTAURANT → spatial QA uses tube_house envelope
+CONVERTED_VILLA_HOTEL           → spatial QA uses single_dwelling envelope (100-500m²)
+CONVERTED_VILLA_RESTAURANT      → spatial QA uses single_dwelling envelope
+CONVERTED_SHOPHOUSE_HOTEL       → spatial QA uses multistory_dwelling envelope (30-150m²)
+CONVERTED_WAREHOUSE_COMMERCIAL  → spatial QA uses warehouse envelope (200-30000m²)
+```
+
+**Dual interpretation**: The spatial matcher uses the physical form for QA
+(plausibility scoring against the building envelope), while the vulnerability
+and value assessment uses the commercial occupancy.
+
+**Regional Override Zones**: For standard commercial types (e.g. `HOTEL` not
+`CONVERTED_TUBE_HOUSE_HOTEL`), the QA step applies a leniency multiplier
+(1.4–1.5x) when the query point falls inside a known conversion zone:
+- Hanoi Old Quarter (Hoàn Kiếm) — 1.5x
+- HCMC District 1 backpacker area (Bùi Viện) — 1.5x
+- HCMC District 3 villa quarter — 1.4x
+- Hội An Ancient Town — 1.5x
+- Bangkok Chinatown (Yaowarat) — 1.5x
+- Bangkok Khao San Road — 1.4x
+- Manila Intramuros — 1.4x
+- Jakarta Kota Tua — 1.4x
+
+This means: if a user declares `structure_type=hotel` at a point inside Hanoi
+Old Quarter, and the best match is a 60m² tube house, the plausibility score
+is multiplied by 1.5x before the rejection threshold check — allowing the
+match to pass QA without requiring the user to know about CONVERTED_* types.
+
+---
+
+## File Changes
+
+### 1. NEW: `src/data/spatial_matcher.py` (~300 lines)
+
+Core spatial matching engine. Isolates all matching logic from the workflow step.
+
+```python
+class SpatialMatchResult:
+    structure: StructuralCharacteristics
+    confidence: float           # 0.0–1.0
+    match_method: str           # "containment", "buffer_overlap", "confidence_scored"
+    containment: bool           # True if point inside polygon
+    overlap_ratio: float        # 0.0–1.0 (buffer overlap / footprint area)
+    centroid_distance_m: float  # haversine to centroid
+    name_matched: bool
+    address_matched: bool
+    poi_validated: bool         # True if POI layer confirms building type
+
+class SpatialMatchContext:
+    name: str                           # requested building name
+    address: str                        # requested address
+    structure_category: Optional[StructureCategory]
+    structure_type: Optional[StructureType]
+    expectation: Optional[StructureExpectation]  # resolved via get_expectation()
+    city: str
+
+class SpatialMatcher:
+    def match(
+        self,
+        lat: float, lon: float,
+        buildings: List[StructuralCharacteristics],
+        building_parts: List[Dict],  # raw Overture building_part rows
+        places: List[Dict],          # Overture POI data
+        context: SpatialMatchContext,
+    ) -> List[SpatialMatchResult]:
+        """Multi-stage spatial matching pipeline."""
+```
+
+**Stage 1 — Polygon Containment + POI Cross-check** (lines ~50–120)
+- For each building with WKT, check `polygon.contains(query_point)`
+- If exactly 1 match → return it (confidence=0.95)
+- If multiple matches → POI cross-check:
+  - Find Overture places within 30m of query point
+  - If a place name matches `context.name`, prefer the building whose polygon
+    contains that place's centroid
+  - If still ambiguous → pass all to Stage 3 (confidence scoring)
+
+**Stage 2 — Buffer Intersection** (lines ~120–180)
+- If Stage 1 found 0 matches (point not inside any polygon):
+  - Create 3m buffer around query point (Shapely `point.buffer(3m_in_degrees)`)
+  - Adaptive buffer from structure_type:
+    - `shopping_mall`, `hotel`, `factory`, `warehouse`, `apartment_building` → 10m
+    - `tube_house`, `informal_settlement`, `retail_shop` → 3m
+    - No type provided → 5m default
+  - `polygon.intersection(buffer)` for each candidate
+  - Sort by intersection area descending
+  - Take candidates with overlap > 0
+  - If exactly 1 → return (confidence = 0.85 * overlap_ratio)
+  - If multiple → pass to Stage 3
+
+**Stage 3 — Confidence Scoring** (lines ~180–280)
+- For all remaining candidates, compute weighted score:
+  ```
+  score = (
+      containment * 0.40 +
+      overlap_ratio * 0.25 +
+      (1 / (1 + distance_m)) * 0.15 +
+      height_similarity * 0.10 +
+      footprint_plausibility * 0.10
+  )
+  ```
+  Where:
+  - `containment`: 1.0 if point inside polygon, else 0.0
+  - `overlap_ratio`: intersection_area / footprint_area (from Stage 2 buffer)
+  - `distance_m`: haversine from point to polygon centroid
+  - `height_similarity`: 1.0 if no `context.expectation`; else derived from
+    `expectation.height_plausible(height_m)` — 1.0 if within range, smooth decay outside
+  - `footprint_plausibility`: `expectation.plausibility_score(area_m2, height_m, floors)`
+    from `structure_expectations.py`. Returns 0.0–1.0 based on how well the candidate's
+    physical dimensions match the declared StructureType. 0.5 (neutral) when no type provided.
+
+- Name/address matching applied as tie-breaker multiplier (not distance hack):
+  - Name match: score *= 1.5
+  - Address match: score *= 1.3
+
+- Reject candidates with score < 0.6
+- Return sorted by score descending, attach `footprint_match_confidence`
+
+**Stage 4 — Building Part Preference** (integrated into Stage 1)
+- When multiple polygons contain the point:
+  - Separate into `building` vs `building_part` types
+  - If any `building_part` contains the point → prefer it (smaller, more specific polygon)
+  - Fall back to parent `building` if no part contains point
+  - This handles podium + tower stacking naturally
+
+**Stage 5 — Vertical Stacking Resolution** (integrated into Stage 3)
+- When multiple overlapping polygons detected:
+  - Prefer the **smallest** polygon containing the point (tower > podium)
+  - Unless height context suggests otherwise:
+    if expected_height < 15m, prefer the larger polygon (likely the low-rise part)
+  - Add 0.1 bonus to smaller-polygon candidates in scoring
+
+**Stage 6 — QA Rejection + Retry** (lines ~280–330)
+- After scoring, validate best match using `context.expectation`:
+  - `expectation.plausibility_score(area, height, floors) < 0.3` → flag mismatch
+    Examples:
+    - `structure_type=hotel` but matched 40m² single-story → score ≈ 0.1 → reject
+    - `structure_type=tube_house` but matched 5000m² polygon → score ≈ 0.05 → reject
+    - `structure_type=apartment_building` but height=4m → score ≈ 0.2 → reject
+  - `building_presence < 0.8` → flag (building may not exist)
+  - `footprint_match_confidence < 0.7` → flag
+  - `expectation.expected_occupancy != matched_occupancy` → soft flag (warning, not rejection)
+- On mismatch:
+  - Expand buffer to 30m → re-run Stage 2 with wider search
+  - Re-score with Stage 3
+  - If still no good match → return best candidate with low confidence flag
+
+### 2. MODIFY: `src/data/overture_buildings.py` (~80 new lines)
+
+**Add `query_building_parts()` method** (new, ~40 lines)
+```python
+OVERTURE_BUILDING_PARTS_PATH = f"{OVERTURE_S3_BASE}/theme=buildings/type=building_part/"
+
+def query_building_parts(self, bbox: BoundingBox, limit: int = 10000) -> List[Dict]:
+    """Query Overture building_part polygons for complex structures."""
+    query = f"""
+    SELECT
+        id,
+        ST_AsText(geometry) AS geometry_wkt,
+        ST_Area_Spheroid(geometry) AS area_m2,
+        ST_Y(ST_Centroid(geometry)) AS centroid_lat,
+        ST_X(ST_Centroid(geometry)) AS centroid_lon,
+        height,
+        num_floors,
+        building_id    -- parent building reference
+    FROM read_parquet('{OVERTURE_BUILDING_PARTS_PATH}*.parquet', hive_partitioning=1)
+    WHERE bbox.xmin >= {bbox.min_lon}
+      AND bbox.xmax <= {bbox.max_lon}
+      AND bbox.ymin >= {bbox.min_lat}
+      AND bbox.ymax <= {bbox.max_lat}
+    LIMIT {limit}
+    """
+```
+
+**Add `query_buildings_containing_point()` method** (new, ~30 lines)
+- Push containment check to DuckDB for efficiency with large datasets:
+```python
+def query_buildings_containing_point(self, lat: float, lon: float, buffer_m: float = 0) -> List[Dict]:
+    """Find buildings whose polygon contains (or is within buffer of) a point."""
+    query = f"""
+    SELECT ...
+    FROM read_parquet(...)
+    WHERE ST_Contains(geometry, ST_Point({lon}, {lat}))
+       OR ST_DWithin(geometry, ST_Point({lon}, {lat}), {buffer_deg})
+    """
+```
+Note: This pushdown is an optimization. The primary containment logic lives in
+SpatialMatcher using Shapely (works on the already-fetched bbox results).
+
+### 3. MODIFY: `src/workflows/steps/asset_fetch.py` (~100 lines changed)
+
+**Refactor `fetch_buildings_step()`:**
+- Remove inline distance/containment/name-matching logic (lines 121–225)
+- Replace with call to `SpatialMatcher.match()`
+- Add building_parts fetch when name/address provided
+- Pass POI places data to matcher
+
+Key changes:
+```python
+from src.data.spatial_matcher import SpatialMatcher, SpatialMatchContext
+
+# After fetching buildings + places:
+matcher = SpatialMatcher()
+context = SpatialMatchContext(
+    name=req_name, address=req_address,
+    asset_type=data.get("asset_type", ""),
+    city=data.get("city", "unknown"),
+)
+
+# Fetch building parts for complex structures (only when name/address hint)
+building_parts = []
+if req_name or req_address:
+    building_parts = await asyncio.to_thread(
+        overture_source.query_building_parts, bbox=bbox
+    )
+
+match_results = matcher.match(lat, lon, structures, building_parts, places, context)
+
+# Convert to structures list, attach confidence
+structures = []
+for mr in match_results:
+    mr.structure.footprint.confidence = mr.confidence  # footprint_match_confidence
+    structures.append(mr.structure)
+```
+
+### 4. MODIFY: `src/data/elevation.py` (~60 new lines)
+
+**Add footprint-based median elevation sampling:**
+
+```python
+def _read_elevation_footprint_sync(wkt_polygon: str) -> float:
+    """Sample median elevation across a building footprint polygon.
+
+    Instead of single-pixel at centroid, clips the DEM to the footprint
+    and returns the median value. Handles:
+    - Height raster misalignment (±5m shift)
+    - Mixed pixel bleed at polygon edges
+    - DEM void fill (nodata pixels excluded from median)
+    """
+    from shapely.wkt import loads as load_wkt
+    from rasterio.mask import mask as rio_mask
+
+    poly = load_wkt(wkt_polygon)
+    centroid = poly.centroid
+    dem_path = _get_dem_path(centroid.y, centroid.x)
+    if not dem_path:
+        return 0.0
+
+    src = _get_cached_dataset(dem_path)
+    # Convert shapely polygon to GeoJSON for rasterio mask
+    geojson = [poly.__geo_interface__]
+    out_image, _ = rio_mask(src, geojson, crop=True, nodata=src.nodata)
+    valid = out_image[out_image != src.nodata]
+    valid = valid[valid > -1000]
+
+    if len(valid) == 0:
+        # Fallback to centroid single-pixel
+        return _read_elevation_sync(centroid.y, centroid.x)
+
+    return float(np.median(valid))
+
+
+async def get_elevation_footprint(wkt_polygon: str) -> float:
+    """Get median elevation across a building footprint polygon."""
+    return await asyncio.to_thread(_read_elevation_footprint_sync, wkt_polygon)
+```
+
+**Update `asset_fetch.py` elevation calls:**
+- When WKT polygon available: use `get_elevation_footprint(wkt)`
+- Fallback to `get_elevation(lat, lon)` if no polygon
+
+### 5. MODIFY: `src/core/models/asset.py` (~25 new lines)
+
+**Add `footprint_match_confidence` field to BuildingFootprint:**
+```python
+footprint_match_confidence: float = Field(
+    default=0.0, ge=0.0, le=1.0,
+    description="Confidence that this footprint is the correct building (0.0–1.0)"
+)
+match_method: Optional[str] = Field(
+    None,
+    description="How this building was matched: containment, buffer_overlap, confidence_scored"
+)
+```
+
+**Add match context fields to StructuralCharacteristics:**
+```python
+poi_validated: bool = Field(
+    default=False,
+    description="True if Overture POI cross-check confirmed building type"
+)
+```
+
+### 6. MODIFY: `src/api/schemas/requests.py` (DONE)
+
+**Added `structure_category` and `structure_type` to Location:**
+```python
+structure_category: Optional[StructureCategory]   # residential, commercial, industrial
+structure_type: Optional[StructureType]            # hotel, tube_house, warehouse, etc.
+```
+Cross-validated: `structure_type` must belong to declared `structure_category`.
+Replaces the free-text `asset_type` on `PortfolioSite` (now deprecated).
+
+### 7. NEW: `src/data/structure_expectations.py` (DONE)
+
+**SEA-calibrated physical characteristics per StructureType:**
+- `StructureExpectation` dataclass: min/max area, height, floors + `plausibility_score()` method
+- `STRUCTURE_EXPECTATIONS` dict: 21 entries (5 residential, 7 commercial, 7 converted, 2 industrial)
+- `CATEGORY_EXPECTATIONS` dict: broad fallback ranges when only category is provided
+- `get_expectation(type, category)` → resolves best available expectation
+- `AdaptiveReuseZone` dataclass + `ADAPTIVE_REUSE_ZONES` list: 8 SEA zones with leniency factors
+- `get_zone_leniency(lat, lon)` → returns multiplier (1.0 outside zones, 1.4–1.5 inside)
+- `CONVERTED_TYPES` dict + `is_converted_type()` / `get_physical_form()` helpers
+
+### 8. MODIFY: `src/core/models/enums.py` (DONE)
+
+**Added `StructureCategory` and `StructureType` enums** for typed API input.
+`StructureType` includes 7 CONVERTED_* values for adaptive reuse.
+
+---
+
+## Implementation Order
+
+1. ~~`src/core/models/enums.py`~~ — StructureCategory + StructureType enums **[DONE]**
+2. ~~`src/api/schemas/requests.py`~~ — structure_category/type on Location **[DONE]**
+3. ~~`src/data/structure_expectations.py`~~ — Physical characteristics reference table **[DONE]**
+4. **`src/core/models/asset.py`** — Add footprint_match_confidence, match_method, poi_validated
+5. **`src/data/overture_buildings.py`** — Add `query_building_parts()` method
+6. **`src/data/spatial_matcher.py`** — NEW: Core matching engine (largest piece)
+7. **`src/workflows/steps/asset_fetch.py`** — Refactor to use SpatialMatcher
+8. **`src/data/elevation.py`** — Add footprint-based median elevation
+
+Steps 1-3 are done. Step 4-5 are foundation. Step 6 is the core work. Steps 7-8 integrate everything.
+
+---
+
+## What This Does NOT Include (Out of Scope)
+
+- **Step 6 from proposal (Street Network Constraint)**: Requires OSM road network data
+  from Overture transportation theme. This adds significant query overhead and a new data
+  dependency. Recommend deferring to a follow-up PR — the confidence scoring model already
+  handles most edge cases that street proximity would catch. Can be added as an optional
+  Stage 3 scoring factor later.
+
+- **PostGIS spatial indexing**: Current architecture uses DuckDB for S3 Parquet queries.
+  Pushing ST_Contains to DuckDB works but is slower than a PostGIS R-tree index.
+  The `query_buildings_containing_point()` DuckDB method is included as an optimization
+  hint, but the primary path uses Shapely on already-fetched bbox results (which works
+  well for the typical 500m search radius returning <5000 buildings).
+
+---
+
+## Risk Assessment
+
+| Risk | Mitigation |
+|------|-----------|
+| Building parts parquet path may differ | Verify path against Overture schema docs; graceful fallback to buildings-only |
+| Shapely buffer in degrees vs meters | Convert meters to degrees using lat-adjusted factor: `buffer_deg = buffer_m / (111320 * cos(lat))` |
+| Confidence threshold 0.6 may reject valid matches | Make threshold configurable; log rejections for tuning |
+| DEM rasterio.mask on small polygons may return empty | Fallback to centroid single-pixel sampling |
+| Performance: multi-stage adds latency | Stages are sequential but each is O(n) on already-fetched buildings; total <100ms for typical queries |

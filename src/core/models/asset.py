@@ -59,6 +59,16 @@ class BuildingFootprint(BaseModel):
         description="Alternate names in other languages (from Overture names.common)"
     )
 
+    # Spatial matching result (set by SpatialMatcher)
+    footprint_match_confidence: float = Field(
+        default=0.0, ge=0.0, le=1.0,
+        description="Confidence that this footprint is the correct building match (0.0-1.0)"
+    )
+    match_method: Optional[str] = Field(
+        None,
+        description="How this building was matched: containment, buffer_overlap, confidence_scored, centroid_distance"
+    )
+
     model_config = {"arbitrary_types_allowed": True}
 
 
@@ -167,7 +177,13 @@ class StructuralCharacteristics(BaseModel):
         default="regional_default",
         description="How structural classification was determined: osm_tags, regional_default, user_provided, ml_classified"
     )
-    
+
+    # Spatial matching QA
+    poi_validated: bool = Field(
+        default=False,
+        description="True if Overture POI cross-check confirmed building type"
+    )
+
     # Replacement value
     replacement_value_usd: Optional[float] = Field(
         None, ge=0,
