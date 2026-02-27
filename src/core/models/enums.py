@@ -142,6 +142,9 @@ class StructureType(str, Enum):
     OFFICE_BUILDING = "office_building"
     RETAIL_SHOP = "retail_shop"
     RESTAURANT = "restaurant"
+    HOSPITAL = "hospital"
+    MUSEUM = "museum"
+    CONVENTION_CENTER = "convention_center"
 
     # Industrial
     FACTORY = "factory"

@@ -24,6 +24,9 @@ CATEGORY_TYPES = {
         StructureType.OFFICE_BUILDING,
         StructureType.RETAIL_SHOP,
         StructureType.RESTAURANT,
+        StructureType.HOSPITAL,
+        StructureType.MUSEUM,
+        StructureType.CONVENTION_CENTER,
         # Adaptive reuse: commercial function in residential/industrial envelope
         StructureType.CONVERTED_TUBE_HOUSE_HOTEL,
         StructureType.CONVERTED_TUBE_HOUSE_SHOP,
