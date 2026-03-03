@@ -130,6 +130,56 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
         except Exception as e:
             logger.warning(f"Building parts fetch failed (non-fatal): {e}")
 
+    # 3.5. Enrich Overture buildings with GEE heights if missing
+    if overture_tried and structures and asset_source._gee_available:
+        try:
+            import ee
+            from src.core.models.asset import BuildingHeight
+            from src.core.models.enums import DataSource
+            
+            logger.info("Enriching Overture buildings with Google Earth Engine heights...")
+            height_image = await asyncio.to_thread(asset_source._fetch_heights_gee, bbox, 2023)
+            
+            if height_image is not None:
+                # convert wkt to GEE geometry
+                from shapely.wkt import loads as load_wkt
+                features = []
+                for i, st in enumerate(structures):
+                    if st.height is None and st.footprint.footprint_wkt:
+                        try:
+                            poly = load_wkt(st.footprint.footprint_wkt)
+                            # simple bounds or centroid since Full polygon might fail GEE limits
+                            geom = ee.Geometry.Point([st.footprint.centroid.lon, st.footprint.centroid.lat])
+                            features.append(ee.Feature(geom, {'idx': i}))
+                        except Exception:
+                            pass
+                
+                if features:
+                    fc = ee.FeatureCollection(features)
+                    stats = await asyncio.to_thread(
+                        lambda: height_image.reduceRegions(
+                            collection=fc,
+                            reducer=ee.Reducer.mean(),
+                            scale=4
+                        ).getInfo()
+                    )
+                    
+                    for f in stats.get('features', []):
+                        props = f.get('properties', {})
+                        idx = props.get('idx')
+                        h = props.get('building_height')
+                        p = props.get('building_presence', 1.0)
+                        
+                        if idx is not None and h is not None:
+                            structures[idx].height = BuildingHeight(
+                                height_m=h,
+                                height_source=DataSource.GOOGLE_OPEN_BUILDINGS_V3,
+                                height_year=2023,
+                                building_presence=p
+                            )
+        except Exception as e:
+            logger.warning(f"Failed to enrich heights from GEE (non-fatal): {e}")
+
     # ------------------------------------------------------------------
     # Multi-stage spatial matching
     # ------------------------------------------------------------------
@@ -189,13 +239,14 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
         return building.footprint.building_id, elev
 
     elev_results = await asyncio.gather(*[_fetch_elev(b) for b in structures])
-    surfaces = {
-        bid: BuildingAdjustedSurface(
+    surfaces = {}
+    for st, (bid, elev) in zip(structures, elev_results):
+        surfaces[bid] = BuildingAdjustedSurface(
             building_id=bid,
             original_elevation_m=elev,
         )
-        for bid, elev in elev_results
-    }
+        # Fix missing ground elevation fields on the structure
+        st.ground_elevation_m = elev
 
     data["building_cluster"] = cluster
     data["building_surfaces"] = surfaces

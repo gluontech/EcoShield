@@ -49,6 +49,7 @@ _LARGE_BUFFER_TYPES = {
     StructureType.OFFICE_BUILDING,
     StructureType.CONVERTED_WAREHOUSE_COMMERCIAL,
     StructureType.HOSPITAL,
+    StructureType.SCHOOL,
     StructureType.MUSEUM,
     StructureType.CONVENTION_CENTER,
 }
@@ -108,8 +109,9 @@ def _transliterate(text: str) -> str:
 
 
 def _token_overlap(a: str, b: str) -> float:
-    ta = set(a.split())
-    tb = set(b.split())
+    stopwords = {"the", "a", "an", "of", "in", "and", "at", "building", "tower", "residence", "hotel", "apartments", "apartment", "complex"}
+    ta = set(a.split()) - stopwords
+    tb = set(b.split()) - stopwords
     if not ta or not tb:
         return 0.0
     return len(ta & tb) / min(len(ta), len(tb))
@@ -149,7 +151,7 @@ class SpatialMatcher:
     # Thresholds (can be tuned)
     CONFIDENCE_REJECT = 0.6
     QA_PLAUSIBILITY_REJECT = 0.3
-    QA_RETRY_BUFFER_M = 30.0
+    QA_RETRY_BUFFER_M = 150.0
 
     def match(
         self,
@@ -185,8 +187,6 @@ class SpatialMatcher:
         contained = self._stage1_containment(
             lat, lon, candidates, building_parts, places, context,
         )
-        if len(contained) == 1:
-            return contained
 
         # Stage 2: buffer intersection
         buffer_hits = self._stage2_buffer(lat, lon, candidates, context)
@@ -414,10 +414,15 @@ class SpatialMatcher:
                     addr_matched = True
 
             multiplier = 1.0
-            if name_matched:
-                multiplier *= 1.5
+            if name_matched or c.poi_validated:
+                multiplier *= 3.0  # Massive boost for name match, especially crucial for small footprint structures
+            elif req_name_t and fp.name:
+                # Explicit penalty: user requested a specific name, the building has a different distinct name
+                # Avoid returning BIDV when the user explicitly asked for The Waterfront Residence
+                multiplier *= 0.3
+
             if addr_matched:
-                multiplier *= 1.3
+                multiplier *= 1.5
 
             c.confidence = min(raw_score * multiplier, 1.0)
             c.name_matched = name_matched

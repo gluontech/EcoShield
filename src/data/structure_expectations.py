@@ -74,35 +74,26 @@ class StructureExpectation:
         if area_m2 is not None and area_m2 > 0:
             if self.area_plausible(area_m2):
                 scores.append(1.0)
+            elif area_m2 < self.min_area_m2:
+                scores.append(max(0.0, area_m2 / max(self.min_area_m2, 1.0)))
             else:
-                dist = min(
-                    abs(area_m2 - self.min_area_m2),
-                    abs(area_m2 - self.max_area_m2),
-                )
-                span = self.max_area_m2 - self.min_area_m2
-                scores.append(max(0.0, 1.0 - dist / max(span, 1.0)))
+                scores.append(max(0.0, self.max_area_m2 / area_m2))
 
         if height_m is not None and height_m > 0:
             if self.height_plausible(height_m):
                 scores.append(1.0)
+            elif height_m < self.min_height_m:
+                scores.append(max(0.0, height_m / max(self.min_height_m, 1.0)))
             else:
-                dist = min(
-                    abs(height_m - self.min_height_m),
-                    abs(height_m - self.max_height_m),
-                )
-                span = self.max_height_m - self.min_height_m
-                scores.append(max(0.0, 1.0 - dist / max(span, 1.0)))
+                scores.append(max(0.0, self.max_height_m / height_m))
 
         if floors is not None and floors > 0:
             if self.floors_plausible(floors):
                 scores.append(1.0)
+            elif floors < self.min_floors:
+                scores.append(max(0.0, floors / max(self.min_floors, 1.0)))
             else:
-                dist = min(
-                    abs(floors - self.min_floors),
-                    abs(floors - self.max_floors),
-                )
-                span = self.max_floors - self.min_floors
-                scores.append(max(0.0, 1.0 - dist / max(span, 1)))
+                scores.append(max(0.0, self.max_floors / floors))
 
         if not scores:
             return 0.5  # no data — neutral
@@ -205,6 +196,13 @@ STRUCTURE_EXPECTATIONS: Dict[StructureType, StructureExpectation] = {
         min_area_m2=500, max_area_m2=50000,
         min_height_m=5, max_height_m=50,
         min_floors=1, max_floors=15,
+        expected_occupancy=BuildingOccupancy.INSTITUTIONAL,
+    ),
+    StructureType.SCHOOL: StructureExpectation(
+        category=StructureCategory.COMMERCIAL,
+        min_area_m2=500, max_area_m2=20000,
+        min_height_m=4, max_height_m=30,
+        min_floors=1, max_floors=6,
         expected_occupancy=BuildingOccupancy.INSTITUTIONAL,
     ),
     StructureType.MUSEUM: StructureExpectation(

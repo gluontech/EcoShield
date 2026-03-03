@@ -143,6 +143,7 @@ class StructureType(str, Enum):
     RETAIL_SHOP = "retail_shop"
     RESTAURANT = "restaurant"
     HOSPITAL = "hospital"
+    SCHOOL = "school"
     MUSEUM = "museum"
     CONVENTION_CENTER = "convention_center"
 

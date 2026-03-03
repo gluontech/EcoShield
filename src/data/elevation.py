@@ -214,7 +214,7 @@ def _read_elevation_footprint_sync(wkt_polygon: str) -> float:
             # Polygon too small or falls on void — fallback to centroid
             return _read_elevation_sync(centroid.y, centroid.x)
 
-        return float(np.median(valid))
+        return float(np.mean(valid))
 
     except Exception as e:
         logger.warning(f"Footprint elevation mask failed, falling back to centroid: {e}")
