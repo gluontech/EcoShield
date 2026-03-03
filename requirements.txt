@@ -42,6 +42,7 @@ charset-normalizer==3.4.4
 click==8.3.1
     # via
     #   cligj
+    #   overturemaps
     #   rasterio
     #   uvicorn
 cligj==0.7.2
@@ -125,12 +126,15 @@ numpy==2.4.2
     #   cftime
     #   geopandas
     #   netcdf4
+    #   overturemaps
     #   pandas
     #   pyogrio
     #   rasterio
     #   scipy
     #   shapely
     #   xarray
+overturemaps==0.19.0
+    # via ecoshield (pyproject.toml)
 packaging==26.0
     # via
     #   geopandas
@@ -148,6 +152,8 @@ protobuf==6.33.5
     #   google-api-core
     #   googleapis-common-protos
     #   proto-plus
+pyarrow==23.0.1
+    # via overturemaps
 pyasn1==0.6.2
     # via
     #   pyasn1-modules
@@ -210,6 +216,7 @@ shapely==2.1.2
     # via
     #   ecoshield (pyproject.toml)
     #   geopandas
+    #   overturemaps
 six==1.17.0
     # via python-dateutil
 starlette==0.52.1

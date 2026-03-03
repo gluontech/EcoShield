@@ -24,6 +24,7 @@ import logging
 from typing import List, Optional, Dict, Any
 
 import duckdb
+import overturemaps
 # import geopandas as gpd # Not strictly needed if returning dicts
 
 from src.core.models.geometry import BoundingBox, Location
@@ -100,25 +101,29 @@ class OvertureBuildingsSource:
         """
         Query Overture building footprints for a bounding box.
         """
-        # Note: 'id' is reserved in some SQL, but ok here
+        try:
+            arrow_table = overturemaps.record_batch_reader("building", (bbox.min_lon, bbox.min_lat, bbox.max_lon, bbox.max_lat)).read_all()
+        except Exception as e:
+            logger.error(f"Overture Maps download failed: {e}")
+            return []
+
+        if arrow_table.num_rows == 0:
+            return []
+
         query = f"""
         SELECT
             id,
-            ST_AsText(geometry) AS geometry_wkt,
-            ST_Area_Spheroid(geometry) AS area_m2,
-            ST_Y(ST_Centroid(geometry)) AS centroid_lat,
-            ST_X(ST_Centroid(geometry)) AS centroid_lon,
+            ST_AsText(ST_GeomFromWKB(geometry)) AS geometry_wkt,
+            ST_Area_Spheroid(ST_GeomFromWKB(geometry)) AS area_m2,
+            ST_Y(ST_Centroid(ST_GeomFromWKB(geometry))) AS centroid_lat,
+            ST_X(ST_Centroid(ST_GeomFromWKB(geometry))) AS centroid_lon,
             height,
             num_floors,
             class,
             subtype,
             sources,
             names
-        FROM read_parquet('{OVERTURE_BUILDINGS_PATH}*.parquet', hive_partitioning=1)
-        WHERE bbox.xmin >= {bbox.min_lon}
-          AND bbox.xmax <= {bbox.max_lon}
-          AND bbox.ymin >= {bbox.min_lat}
-          AND bbox.ymax <= {bbox.max_lat}
+        FROM arrow_table
         LIMIT {limit}
         """
         
@@ -144,21 +149,26 @@ class OvertureBuildingsSource:
         podium vs tower). The spatial matcher prefers parts that contain
         the query point over the parent building polygon.
         """
+        try:
+            arrow_table = overturemaps.record_batch_reader("building_part", (bbox.min_lon, bbox.min_lat, bbox.max_lon, bbox.max_lat)).read_all()
+        except Exception as e:
+            logger.warning(f"Overture Maps download failed: {e}")
+            return []
+
+        if arrow_table.num_rows == 0:
+            return []
+
         query = f"""
         SELECT
             id,
-            ST_AsText(geometry) AS geometry_wkt,
-            ST_Area_Spheroid(geometry) AS area_m2,
-            ST_Y(ST_Centroid(geometry)) AS centroid_lat,
-            ST_X(ST_Centroid(geometry)) AS centroid_lon,
+            ST_AsText(ST_GeomFromWKB(geometry)) AS geometry_wkt,
+            ST_Area_Spheroid(ST_GeomFromWKB(geometry)) AS area_m2,
+            ST_Y(ST_Centroid(ST_GeomFromWKB(geometry))) AS centroid_lat,
+            ST_X(ST_Centroid(ST_GeomFromWKB(geometry))) AS centroid_lon,
             height,
             num_floors,
             building_id
-        FROM read_parquet('{OVERTURE_BUILDING_PARTS_PATH}*.parquet', hive_partitioning=1)
-        WHERE bbox.xmin >= {bbox.min_lon}
-          AND bbox.xmax <= {bbox.max_lon}
-          AND bbox.ymin >= {bbox.min_lat}
-          AND bbox.ymax <= {bbox.max_lat}
+        FROM arrow_table
         LIMIT {limit}
         """
 
@@ -182,19 +192,24 @@ class OvertureBuildingsSource:
         The places theme (theme=places/type=place) contains addresses and
         richer name data that the buildings theme lacks.
         """
+        try:
+            arrow_table = overturemaps.record_batch_reader("place", (bbox.min_lon, bbox.min_lat, bbox.max_lon, bbox.max_lat)).read_all()
+        except Exception as e:
+            logger.warning(f"Overture Maps download failed: {e}")
+            return []
+
+        if arrow_table.num_rows == 0:
+            return []
+
         query = f"""
         SELECT
             id,
-            ST_Y(ST_Centroid(geometry)) AS centroid_lat,
-            ST_X(ST_Centroid(geometry)) AS centroid_lon,
+            ST_Y(ST_Centroid(ST_GeomFromWKB(geometry))) AS centroid_lat,
+            ST_X(ST_Centroid(ST_GeomFromWKB(geometry))) AS centroid_lon,
             names,
             addresses,
             categories
-        FROM read_parquet('{OVERTURE_PLACES_PATH}*.parquet', hive_partitioning=1)
-        WHERE bbox.xmin >= {bbox.min_lon}
-          AND bbox.xmax <= {bbox.max_lon}
-          AND bbox.ymin >= {bbox.min_lat}
-          AND bbox.ymax <= {bbox.max_lat}
+        FROM arrow_table
         LIMIT {limit}
         """
 

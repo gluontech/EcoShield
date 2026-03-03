@@ -8,6 +8,8 @@ services:
     command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
     env_file:
       - .env
+    environment:
+      - GEE_KEY_FILE=/app/secrets/earth-engine-key.json
     depends_on:
       - db
       - redis
@@ -23,6 +25,8 @@ services:
       dockerfile: docker/Dockerfile.worker
     env_file:
       - .env
+    environment:
+      - GEE_KEY_FILE=/app/secrets/earth-engine-key.json
     depends_on:
       - db
       - redis
