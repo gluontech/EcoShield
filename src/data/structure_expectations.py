@@ -200,6 +200,27 @@ STRUCTURE_EXPECTATIONS: Dict[StructureType, StructureExpectation] = {
         min_floors=1, max_floors=3,
         expected_occupancy=BuildingOccupancy.COMMERCIAL,
     ),
+    StructureType.HOSPITAL: StructureExpectation(
+        category=StructureCategory.COMMERCIAL,
+        min_area_m2=500, max_area_m2=50000,
+        min_height_m=5, max_height_m=50,
+        min_floors=1, max_floors=15,
+        expected_occupancy=BuildingOccupancy.INSTITUTIONAL,
+    ),
+    StructureType.MUSEUM: StructureExpectation(
+        category=StructureCategory.COMMERCIAL,
+        min_area_m2=300, max_area_m2=20000,
+        min_height_m=5, max_height_m=40,
+        min_floors=1, max_floors=8,
+        expected_occupancy=BuildingOccupancy.INSTITUTIONAL,
+    ),
+    StructureType.CONVENTION_CENTER: StructureExpectation(
+        category=StructureCategory.COMMERCIAL,
+        min_area_m2=2000, max_area_m2=150000,
+        min_height_m=10, max_height_m=40,
+        min_floors=1, max_floors=5,
+        expected_occupancy=BuildingOccupancy.COMMERCIAL,
+    ),
 
     # ── Industrial ───────────────────────────────────────────
 

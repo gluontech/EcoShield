@@ -48,6 +48,9 @@ _LARGE_BUFFER_TYPES = {
     StructureType.APARTMENT_BUILDING,
     StructureType.OFFICE_BUILDING,
     StructureType.CONVERTED_WAREHOUSE_COMMERCIAL,
+    StructureType.HOSPITAL,
+    StructureType.MUSEUM,
+    StructureType.CONVENTION_CENTER,
 }
 _SMALL_BUFFER_TYPES = {
     StructureType.TUBE_HOUSE,
