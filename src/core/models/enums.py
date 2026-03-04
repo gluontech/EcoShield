@@ -47,6 +47,7 @@ class RiskTier(str, Enum):
 
 class SSPScenario(str, Enum):
     """SSP climate scenarios."""
+    SSP119 = "ssp119"
     SSP126 = "ssp126"
     SSP245 = "ssp245"
     SSP370 = "ssp370"
@@ -162,3 +163,92 @@ class StructureType(str, Enum):
     CONVERTED_VILLA_RESTAURANT = "converted_villa_restaurant"
     CONVERTED_SHOPHOUSE_HOTEL = "converted_shophouse_hotel"
     CONVERTED_WAREHOUSE_COMMERCIAL = "converted_warehouse_commercial"
+
+
+class ResponseProfile(str, Enum):
+    """Controls the level of detail in API responses."""
+    SUMMARY = "summary"          # Risk scores + categories only
+    STANDARD = "standard"        # + intermediates + key_drivers
+    FULL_DEBUG = "full_debug"    # + lineage, resolution, all data_sources
+
+
+# ---------------------------------------------------------------------------
+# Response schema enums (v2.0)
+# ---------------------------------------------------------------------------
+
+class RiskCategory(str, Enum):
+    """Overall risk category label."""
+    NONE = "None"
+    LOW = "Low"
+    MODERATE = "Moderate"
+    HIGH = "High"
+    EXTREME = "Extreme"
+    NOT_ASSESSED = "Not Assessed"
+
+
+class ImpactTier(str, Enum):
+    """Impact score tier (0-1 scale)."""
+    NONE = "None"
+    LOW = "Low"
+    MODERATE = "Moderate"
+    HIGH = "High"
+    CRITICAL = "Critical"
+
+
+class AggregationMethod(str, Enum):
+    """Method used to aggregate hazard scores."""
+    COMPOSITE_WEIGHTED_AVERAGE = "composite_weighted_average"
+    MAX = "max"
+    WEIGHTED_SUM = "weighted_sum"
+
+
+class MatchMethod(str, Enum):
+    """How a building footprint was matched to the query location."""
+    BUFFER_OVERLAP = "buffer_overlap"
+    CENTROID = "centroid"
+    EXACT = "exact"
+    CONTAINMENT = "containment"
+    CONTAINMENT_PART = "containment_part"
+
+
+class UncertaintyType(str, Enum):
+    """Source of uncertainty for intensity estimates."""
+    MEASUREMENT_30PCT = "measurement_uncertainty_30pct"
+    ENSEMBLE_INTER_MODEL = "ensemble_inter_model_spread"
+    PARAMETRIC_MODEL = "parametric_model_uncertainty"
+    IPCC_AR6_SCENARIO_RANGE = "ipcc_ar6_scenario_range"
+    MANNING_35PCT = "manning_parameter_uncertainty_35pct"
+    PROXY_MODEL_HIGH = "proxy_model_high_uncertainty"
+    GUMBEL_FIT = "gumbel_fit_uncertainty"
+
+
+class IntensityUnit(str, Enum):
+    """Physical unit for hazard intensity values."""
+    MM_YR = "mm/yr"
+    M_S = "m/s"
+    METRES = "m"
+    CELSIUS = "C"
+    KPA = "kPa"
+    MM = "mm"
+
+
+class SLRScenario(str, Enum):
+    """Sea-level rise projection confidence tier."""
+    LOW = "low"
+    MEDIAN = "median"
+    HIGH = "high"
+
+
+class SignalUniformity(str, Enum):
+    """Scale at which the climate signal is spatially uniform."""
+    GRID_CELL = "grid_cell"
+    DOWNSCALED = "downscaled"
+    STATION = "station"
+
+
+class DownscalingMethod(str, Enum):
+    """Method used to downscale climate forcing to site level."""
+    TERRAIN_OVERLAY_ONLY = "terrain_overlay_only"
+    STATISTICAL = "statistical"
+    DYNAMICAL = "dynamical"
+    HYBRID = "hybrid"

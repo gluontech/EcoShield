@@ -1,10 +1,16 @@
 # src/api/schemas/responses.py
 """
 Pydantic response models for the EcoShield API.
+
+v2.0 strict models are in ``src.core.models.response_models``.
+This module re-exports the root model and keeps legacy building schemas.
 """
 
 from typing import Optional, Dict, List, Any
 from pydantic import BaseModel, Field
+
+# v2.0 strict response model
+from src.core.models.response_models import RiskAssessmentReport  # noqa: F401
 
 
 class HazardScore(BaseModel):
