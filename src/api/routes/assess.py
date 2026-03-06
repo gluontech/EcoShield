@@ -37,7 +37,7 @@ async def assess_site(request: AssessRequest):
             city=request.city,
             slr_scenario=request.scenario.value,
             time_horizon=request.time_horizon.midpoint,
-            return_period=request.return_periods[0],
+            return_period=_select_primary_rp(request.return_periods),
             include_buildings=True,
             multi_rp=len(request.return_periods) > 1,
             return_periods=request.return_periods,
@@ -196,4 +196,17 @@ def _extract_asset(hazards_data: dict) -> dict:
 
     # Fallback — should never happen in practice
     raise ValueError("No hazard result contained exposure/structure data")
+
+
+def _select_primary_rp(periods: list[int]) -> int:
+    """Select 100-year RP if available, otherwise largest.
+
+    The request validator sorts periods ascending, so periods[0] is
+    the smallest (e.g. 10-year).  Using it as the primary RP biases
+    assessments toward low-severity events.  We prefer RP=100 as the
+    industry-standard design return period.
+    """
+    if 100 in periods:
+        return 100
+    return max(periods)
 

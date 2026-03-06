@@ -590,13 +590,13 @@ class _HazardBase(_Base):
         description="False when hazard is near-zero impact for this location",
     )
     key_drivers: list[str] = Field(default_factory=list)
-    event_context: EventContext
+    event_context: EventContext | None = None
     intensity: HazardIntensityInfo
-    resolution: ResolutionInfo
+    resolution: ResolutionInfo | None = None
     data_sources: list[DataSourceRef] = Field(min_length=1)
-    limitations: list[str] = Field(default_factory=list)
-    lineage: DataLineage
-    exposure_overrides: ExposureOverrides
+    limitations: list[str] | None = None
+    lineage: DataLineage | None = None
+    exposure_overrides: ExposureOverrides | None = None
     impact: ImpactResult
     can_aggregate_with: list[HazardType] = Field(default_factory=list)
     dependency_order: int = Field(ge=1, le=10)
@@ -633,37 +633,55 @@ class _HazardBase(_Base):
 
 class SubsidenceHazard(_HazardBase):
     hazard_type: Literal[HazardType.SUBSIDENCE]
-    intermediate: SubsidenceIntermediate
+    intermediate: SubsidenceIntermediate | None = None
 
 
 class UrbanHeatHazard(_HazardBase):
     hazard_type: Literal[HazardType.URBAN_HEAT]
-    intermediate: UrbanHeatIntermediate
+    intermediate: UrbanHeatIntermediate | None = None
 
 
 class StormSurgeHazard(_HazardBase):
     hazard_type: Literal[HazardType.STORM_SURGE]
-    intermediate: StormSurgeIntermediate
+    intermediate: StormSurgeIntermediate | None = None
 
 
 class CoastalFloodHazard(_HazardBase):
     hazard_type: Literal[HazardType.COASTAL_FLOOD]
-    intermediate: CoastalFloodIntermediate
+    intermediate: CoastalFloodIntermediate | None = None
 
 
 class RiverineFloodHazard(_HazardBase):
     hazard_type: Literal[HazardType.RIVERINE_FLOOD]
-    intermediate: RiverineFloodIntermediate
+    intermediate: RiverineFloodIntermediate | None = None
 
 
 class PluvialFloodHazard(_HazardBase):
     hazard_type: Literal[HazardType.PLUVIAL_FLOOD]
-    intermediate: PluvialFloodIntermediate
+    intermediate: PluvialFloodIntermediate | None = None
 
 
 class TropicalCycloneHazard(_HazardBase):
     hazard_type: Literal[HazardType.TROPICAL_CYCLONE]
-    intermediate: TropicalCycloneIntermediate
+    intermediate: TropicalCycloneIntermediate | None = None
+
+
+class LandslideIntermediate(_Base):
+    """Multi-factor landslide susceptibility model output."""
+
+    slope_degrees: Annotated[float, Field(ge=0.0, le=90.0)]
+    base_susceptibility: NonNegativeFloat
+    soil_factor: UnitFloat
+    vegetation_factor: UnitFloat
+    trigger_ratio: NonNegativeFloat
+    triggered: bool
+    combined_score: NonNegativeFloat
+    precip_mm_day: NonNegativeFloat
+
+
+class LandslideHazard(_HazardBase):
+    hazard_type: Literal[HazardType.LANDSLIDE]
+    intermediate: LandslideIntermediate | None = None
 
 
 class UnassessedHazard(_Base):
@@ -686,6 +704,7 @@ _AssessedHazard = Annotated[
         RiverineFloodHazard,
         PluvialFloodHazard,
         TropicalCycloneHazard,
+        LandslideHazard,
     ],
     Field(discriminator="hazard_type"),
 ]

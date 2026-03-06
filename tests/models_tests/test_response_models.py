@@ -17,12 +17,19 @@ from src.core.models.response_models import (
     EventContext,
     HazardIntensityInfo,
     SubsidenceHazard,
+    LandslideHazard,
+    LandslideIntermediate,
     UnassessedHazard,
     TimeHorizonResponse,
     ConfidenceScore,
     DataSourceRef,
+    ImpactResult,
+    ResolutionInfo,
+    DataLineage,
+    ExposureOverrides,
 )
 from src.core.models.enums import HazardType, MatchMethod
+from src.api.routes.assess import _select_primary_rp
 
 
 FIXTURE_PATH = Path(__file__).resolve().parents[2] / "response_improved.json"
@@ -71,7 +78,8 @@ class TestRoundTrip:
         for h in report.assessed_hazards():
             assert hasattr(h, "intermediate")
 
-    def test_unassessed_hazard(self, report: RiskAssessmentReport) -> None:
+    def test_unassessed_hazard_in_fixture(self, report: RiskAssessmentReport) -> None:
+        """Landslide is unassessed in the reference fixture (HCMC)."""
         landslide = report.hazard_by_type(HazardType.LANDSLIDE)
         assert isinstance(landslide, UnassessedHazard)
         assert landslide.risk_score == 0
@@ -242,3 +250,163 @@ class TestEnums:
         }
         actual = {h.value for h in HazardType}
         assert expected == actual
+
+
+# ── Summary profile Optional fields (Issue 1) ──
+
+class TestSummaryProfileOptionalFields:
+    """Verify assessed hazards validate without summary-stripped fields."""
+
+    def _minimal_hazard_dict(self) -> dict:
+        """Return a minimal SubsidenceHazard dict without optional fields."""
+        return {
+            "hazard_type": "subsidence",
+            "risk_score": 0.3,
+            "risk_category": "Low",
+            "confidence": {"score": 0.25, "category": "low"},
+            "is_applicable": True,
+            "key_drivers": [],
+            # event_context, resolution, lineage, exposure_overrides, limitations
+            # are intentionally OMITTED (summary profile)
+            "intensity": {
+                "value": 5.0, "unit": "mm/yr", "p5": 2.0, "p95": 8.0,
+                "uncertainty_type": "proxy_model_high_uncertainty",
+            },
+            "data_sources": [{"id": "test", "name": "Test", "version": None}],
+            "impact": {
+                "score": 0.3, "tier": "Low",
+                "status": "unvalidated",
+                "validation_source": "unvalidated_baseline",
+            },
+            "can_aggregate_with": [],
+            "dependency_order": 1,
+            # intermediate also omitted (summary profile strips it)
+        }
+
+    def test_subsidence_without_optional_fields(self) -> None:
+        """Summary profile record validates as SubsidenceHazard."""
+        hazard = SubsidenceHazard.model_validate(self._minimal_hazard_dict())
+        assert hazard.event_context is None
+        assert hazard.resolution is None
+        assert hazard.lineage is None
+        assert hazard.exposure_overrides is None
+        assert hazard.limitations is None
+        assert hazard.intermediate is None
+
+    def test_with_all_fields_still_works(self) -> None:
+        """Standard profile with all fields still validates."""
+        data = self._minimal_hazard_dict()
+        data["event_context"] = {
+            "event_type": "chronic", "return_period_years": None,
+        }
+        data["resolution"] = {
+            "climate_forcing_m": 25000, "native_m": 30,
+            "effective_m": 30, "signal_uniformity": "grid_cell",
+            "downscaling_method": "terrain_overlay_only",
+        }
+        data["lineage"] = {"source": "insar", "timestamp": "2026-01-01T00:00:00Z"}
+        data["exposure_overrides"] = {"adjustments_applied": []}
+        data["limitations"] = ["Limited InSAR coverage"]
+        data["intermediate"] = {
+            "velocity_mm_yr": -5.0, "abs_rate_mm_yr": 5.0,
+            "cumulative_mm": 150.0, "cumulative_m": 0.15,
+            "years_forward": 30, "original_elevation_m": 3.0,
+            "adjusted_elevation_m": 2.85, "subsidence_source": "insar",
+        }
+        hazard = SubsidenceHazard.model_validate(data)
+        assert hazard.event_context is not None
+        assert hazard.intermediate is not None
+
+
+# ── Landslide assessed hazard (Issue 2) ──
+
+class TestLandslideAssessedHazard:
+    """Verify landslide records parse as LandslideHazard, not UnassessedHazard."""
+
+    def test_landslide_hazard_construction(self) -> None:
+        data = {
+            "hazard_type": "landslide",
+            "risk_score": 0.45,
+            "risk_category": "Moderate",
+            "confidence": {"score": 0.50, "category": "moderate"},
+            "is_applicable": True,
+            "key_drivers": [],
+            "intensity": {
+                "value": 42.0, "unit": "m",
+                "p5": 29.4, "p95": 54.6,
+                "uncertainty_type": "proxy_model_high_uncertainty",
+            },
+            "data_sources": [
+                {"id": "copernicus_glo30", "name": "GLO-30 DEM", "version": None},
+            ],
+            "impact": {
+                "score": 0.42, "tier": "Moderate",
+                "status": "unvalidated",
+                "validation_source": "unvalidated_baseline",
+            },
+            "can_aggregate_with": ["riverine_flood", "tropical_cyclone"],
+            "dependency_order": 6,
+            "intermediate": {
+                "slope_degrees": 18.5,
+                "base_susceptibility": 35.0,
+                "soil_factor": 0.45,
+                "vegetation_factor": 0.6,
+                "trigger_ratio": 1.2,
+                "triggered": True,
+                "combined_score": 42.0,
+                "precip_mm_day": 85.3,
+            },
+        }
+        hazard = LandslideHazard.model_validate(data)
+        assert hazard.hazard_type == HazardType.LANDSLIDE
+        assert hazard.intermediate.triggered is True
+        assert hazard.intermediate.slope_degrees == 18.5
+
+    def test_landslide_summary_mode(self) -> None:
+        """Landslide in summary mode (no intermediate) still validates."""
+        data = {
+            "hazard_type": "landslide",
+            "risk_score": 0.45,
+            "risk_category": "Moderate",
+            "confidence": {"score": 0.50, "category": "moderate"},
+            "is_applicable": True,
+            "key_drivers": [],
+            "intensity": {
+                "value": 42.0, "unit": "m",
+                "p5": 29.4, "p95": 54.6,
+                "uncertainty_type": "proxy_model_high_uncertainty",
+            },
+            "data_sources": [
+                {"id": "copernicus_glo30", "name": "GLO-30 DEM", "version": None},
+            ],
+            "impact": {
+                "score": 0.42, "tier": "Moderate",
+                "status": "unvalidated",
+                "validation_source": "unvalidated_baseline",
+            },
+            "can_aggregate_with": [],
+            "dependency_order": 6,
+        }
+        hazard = LandslideHazard.model_validate(data)
+        assert hazard.intermediate is None
+
+
+# ── Primary RP selection (Issue 3) ──
+
+class TestSelectPrimaryRp:
+    """Verify _select_primary_rp picks the right return period."""
+
+    def test_default_periods_returns_100(self) -> None:
+        assert _select_primary_rp([10, 25, 50, 100, 250]) == 100
+
+    def test_single_period_100(self) -> None:
+        assert _select_primary_rp([100]) == 100
+
+    def test_no_100_returns_max(self) -> None:
+        assert _select_primary_rp([10, 25, 50]) == 50
+
+    def test_single_non_100(self) -> None:
+        assert _select_primary_rp([250]) == 250
+
+    def test_all_standard_periods(self) -> None:
+        assert _select_primary_rp([2, 5, 10, 25, 50, 100, 250, 500, 1000]) == 100

@@ -56,6 +56,11 @@ _INTERMEDIATE_KEYS: dict[str, set[str]] = {
         "rmw_km", "saffir_simpson_category", "cyclone_params",
         "max_wind_kts",
     },
+    "landslide": {
+        "slope_degrees", "base_susceptibility", "soil_factor",
+        "vegetation_factor", "trigger_ratio", "triggered",
+        "combined_score", "precip_mm_day",
+    },
 }
 
 # Known data source patterns → structured refs
