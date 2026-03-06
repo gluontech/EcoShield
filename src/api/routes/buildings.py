@@ -20,7 +20,7 @@ from src.api.schemas.responses import (
     BuildingAssessResponse, BuildingRiskItem, BuildingPortfolioSummary,
     ReturnPeriodLossItem,
 )
-from src.api.utils import parse_time_horizon
+from src.api.utils import score_to_category
 from src.workflows.hazard_workflow import run_hazard_assessment
 
 router = APIRouter()
@@ -41,19 +41,18 @@ async def assess_buildings(request: BuildingAssessRequest):
     pluvial flood damage, occupancy class, and trapezoidal EAL.
     """
     start = time.monotonic()
-    time_horizon_val = parse_time_horizon(request.time_horizon)
 
     try:
         result = await run_hazard_assessment(
             lat=request.lat,
             lon=request.lon,
             city=request.city,
-            return_period=request.return_period,
-            time_horizon=time_horizon_val,
+            return_period=request.return_periods[0],
+            time_horizon=request.time_horizon.midpoint,
             slr_scenario=request.scenario.value,
             include_buildings=True,
             building_radius_m=request.radius_m,
-            multi_rp=request.multi_rp,
+            multi_rp=len(request.return_periods) > 1,
             return_periods=request.return_periods,
         )
     except FileNotFoundError as e:
@@ -72,10 +71,7 @@ async def assess_buildings(request: BuildingAssessRequest):
     portfolio_summary = result.portfolio_summary
 
     # Determine actual return periods assessed
-    rps_assessed = None
-    if request.multi_rp:
-        from src.core.models import STANDARD_RETURN_PERIODS
-        rps_assessed = request.return_periods or STANDARD_RETURN_PERIODS
+    rps_assessed = request.return_periods
 
     # Build response items (cap at max_buildings)
     building_items = []
@@ -147,8 +143,8 @@ async def assess_buildings(request: BuildingAssessRequest):
         radius_m=request.radius_m,
         city=request.city,
         scenario=request.scenario.value,
-        return_period=request.return_period,
-        multi_rp=request.multi_rp,
+        return_period=request.return_periods[0],
+        multi_rp=len(request.return_periods) > 1,
         return_periods_assessed=rps_assessed,
         n_buildings=len(building_items),
         buildings=building_items,

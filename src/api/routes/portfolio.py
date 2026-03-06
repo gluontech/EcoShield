@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 
 from src.api.schemas.requests import PortfolioRequest
 from src.api.schemas.responses import PortfolioResponse, PortfolioSiteResult
-from src.api.utils import parse_time_horizon, score_to_category
+from src.api.utils import score_to_category
 from src.workflows.hazard_workflow import run_hazard_assessment
 
 router = APIRouter()
@@ -27,7 +27,6 @@ async def assess_portfolio(request: PortfolioRequest):
     """
     start = time.monotonic()
     semaphore = asyncio.Semaphore(10)
-    time_horizon_val = parse_time_horizon(request.time_horizon)
 
     async def _assess_one(site):
         async with semaphore:
@@ -37,9 +36,9 @@ async def assess_portfolio(request: PortfolioRequest):
                     lon=site.location.lon,
                     city=site.city,
                     slr_scenario=request.scenario.value,
-                    time_horizon=time_horizon_val,
-                    return_period=request.return_period,
-                    multi_rp=request.multi_rp,
+                    time_horizon=request.time_horizon.midpoint,
+                    return_period=request.return_periods[0],
+                    multi_rp=len(request.return_periods) > 1,
                     return_periods=request.return_periods,
                 )
             except Exception:
@@ -47,7 +46,7 @@ async def assess_portfolio(request: PortfolioRequest):
                     location={
                         "lat": site.location.lat,
                         "lon": site.location.lon,
-                        "name": site.location.name,
+                        "name": site.structure.name if site.structure else None,
                     },
                     overall_risk_score=0.0,
                     overall_risk_category="Error",
@@ -57,7 +56,7 @@ async def assess_portfolio(request: PortfolioRequest):
                     portfolio_eal_usd=None,
                 )
 
-            result_dict = result.model_dump() if hasattr(result, "model_dump") else result
+            result_dict = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
             # FullRiskProfile stores hazards under acute_hazard_details and chronic_hazard_details
             chronic = result_dict.get("chronic_hazard_details", {})
             acute = result_dict.get("acute_hazard_details", {})
@@ -87,7 +86,7 @@ async def assess_portfolio(request: PortfolioRequest):
                 location={
                     "lat": site.location.lat,
                     "lon": site.location.lon,
-                    "name": site.location.name,
+                    "name": site.structure.name if site.structure else None,
                 },
                 overall_risk_score=round(overall, 3),
                 overall_risk_category=score_to_category(overall),
@@ -106,17 +105,12 @@ async def assess_portfolio(request: PortfolioRequest):
     total_eal = sum(r.expected_annual_loss_usd or 0 for r in results)
     total_portfolio_eal = sum(r.portfolio_eal_usd or 0 for r in results)
 
-    rps_assessed = None
-    if request.multi_rp:
-        from src.core.models import STANDARD_RETURN_PERIODS
-        rps_assessed = request.return_periods or STANDARD_RETURN_PERIODS
-
     return PortfolioResponse(
         n_sites=len(results),
         scenario=request.scenario.value,
-        time_horizon=request.time_horizon,
-        multi_rp=request.multi_rp,
-        return_periods_assessed=rps_assessed,
+        time_horizon=str(request.time_horizon),
+        multi_rp=len(request.return_periods) > 1,
+        return_periods_assessed=request.return_periods,
         sites=results,
         portfolio_summary={
             "mean_risk_score": round(sum(all_scores) / max(len(all_scores), 1), 3),

@@ -13,6 +13,9 @@ from .enums import (
     BuildingMaterial,
     BuildingOccupancy,
     VulnerabilityClass,
+    StructureCategory,
+    StructureType,
+    ResponseProfile,
 )
 from .geometry import (
     Location, 
@@ -91,6 +94,9 @@ __all__ = [
     "BuildingMaterial",       # NEW v3.1
     "BuildingOccupancy",      # NEW v3.1
     "VulnerabilityClass",     # NEW v3.1
+    "StructureCategory",
+    "StructureType",
+    "ResponseProfile",
     # Geometry
     "Location",
     "BoundingBox",

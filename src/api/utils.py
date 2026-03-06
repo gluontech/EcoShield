@@ -20,12 +20,12 @@ def parse_time_horizon(time_horizon: str, fallback: int = 2050) -> int:
 
 def score_to_category(score: float) -> str:
     """Convert a normalised 0-1 risk score to a human-readable category."""
-    if score < 0.2:
+    if score <= 0:
+        return "None"
+    if score < 0.25:
         return "Low"
-    elif score < 0.4:
+    if score < 0.50:
         return "Moderate"
-    elif score < 0.6:
+    if score < 0.75:
         return "High"
-    elif score < 0.8:
-        return "Very High"
     return "Extreme"
