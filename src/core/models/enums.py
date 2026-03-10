@@ -209,6 +209,7 @@ class MatchMethod(str, Enum):
     EXACT = "exact"
     CONTAINMENT = "containment"
     CONTAINMENT_PART = "containment_part"
+    CONTAINMENT_LOW_CONFIDENCE = "containment_low_confidence"
 
 
 class UncertaintyType(str, Enum):

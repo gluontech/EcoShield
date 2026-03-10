@@ -90,10 +90,14 @@ def compute_pluvial_susceptibility(
     # CN method simplified: C ≈ 0.3 + 0.65 × impervious_fraction
     runoff_coeff = 0.3 + 0.65 * impervious_fraction
     
-    # Estimated depth for flat urban areas (simplified mass balance)
-    # depth = rainfall × runoff_coeff / 1000 (mm → m)
-    # Adjusted by susceptibility to account for drainage capacity (susceptibility < 1 implies some drainage/runoff elsewhere)
-    estimated_depth = (design_rainfall_mm * runoff_coeff / 1000.0) * susceptibility
+    # Estimated depth for flat urban areas
+    # A simple mass balance underestimates street-level ponding because water concentrates.
+    # We apply a concentration factor (CF) based on susceptibility.
+    concentration_factor = 2.0 + (susceptibility * 5.0)  # CF 2.0 to 7.0
+    estimated_depth = (design_rainfall_mm / 1000.0) * runoff_coeff * concentration_factor
+    
+    # Cap maximum pluvial depth at 1.5m to avoid unrealistic pooling
+    estimated_depth = min(1.5, estimated_depth)
     
     return PluvialFloodResult(
         susceptibility_index=round(susceptibility, 3),
