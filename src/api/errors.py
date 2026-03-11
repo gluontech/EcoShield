@@ -3,6 +3,7 @@
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from pydantic import ValidationError
 
 
@@ -15,7 +16,7 @@ def register_error_handlers(app: FastAPI):
             status_code=422,
             content={
                 "error": "Validation Error",
-                "detail": exc.errors(),
+                "detail": jsonable_encoder(exc.errors()),
                 "status_code": 422,
             },
         )

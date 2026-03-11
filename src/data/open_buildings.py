@@ -28,6 +28,7 @@ import ee
 import geopandas as gpd
 import pandas as pd
 import numpy as np
+import asyncio
 
 from src.core.models.geometry import BoundingBox, Location
 from src.core.models.asset import BuildingFootprint, BuildingHeight, StructuralCharacteristics
@@ -96,13 +97,13 @@ class OpenBuildingsSource:
             logger.error("GEE not available. Returning empty list.")
             return []
         
-        footprints = self._fetch_footprints_gee(bbox, min_confidence)
+        footprints = await asyncio.to_thread(self._fetch_footprints_gee, bbox, min_confidence)
         logger.info(f"Fetched {len(footprints)} footprints from GEE")
         
         # Step 3: Enrich with heights
         if include_heights and footprints:
-            heights = self._fetch_heights_gee(bbox, height_year)
-            footprints = self._join_heights(footprints, heights)
+            heights = await asyncio.to_thread(self._fetch_heights_gee, bbox, height_year)
+            footprints = await asyncio.to_thread(self._join_heights, footprints, heights)
         
         # Step 4: Build StructuralCharacteristics with inferred classification
         structures = [

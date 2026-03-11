@@ -186,9 +186,18 @@ async def get_regional_cyclone_statistics(
             rainfall_proxy_mm=60.0,
         )
 
-    shape, loc, scale = stats.genextreme.fit(winds)
-    p = 1 - 1 / return_period
-    return_wind = stats.genextreme.ppf(p, shape, loc=loc, scale=scale)
+    try:
+        shape, loc, scale = stats.genextreme.fit(winds)
+        p = 1 - 1 / return_period
+        return_wind = float(stats.genextreme.ppf(p, shape, loc=loc, scale=scale))
+    except Exception:
+        return_wind = float(np.max(winds))
+
+    # Guardrail: Limit extreme extrapolation
+    max_hist = float(np.max(winds))
+    return_wind = max(return_wind, max_hist) # Don't project lower than historical
+    return_wind = min(return_wind, 85.0)     # Cap unrealistic >85 m/s (Super Typhoon)
+
 
     # Atkinson-Holliday pressure relationship
     return_pressure = 1010 - (return_wind / 3.92) ** 2

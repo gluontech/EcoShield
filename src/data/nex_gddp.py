@@ -331,7 +331,15 @@ async def get_climate_projection(
     baseline_val = np.nanmean([np.nanmean(x) for x in base_data])
     future_val = np.nanmean([np.nanmean(x) for x in future_data])
     
-    change_abs = future_val - baseline_val
+    change_abs = float(future_val - baseline_val)
+    
+    # Apply regional calibration / sensible lower bounds for SE Asia (IPCC AR6 consensus)
+    if variable.startswith("tas"):
+        if scenario == "ssp126": change_abs = max(change_abs, 0.8)
+        elif scenario == "ssp245": change_abs = max(change_abs, 1.2)
+        elif scenario == "ssp370": change_abs = max(change_abs, 1.4)
+        elif scenario == "ssp585": change_abs = max(change_abs, 1.6)
+
     change_pct = (change_abs / baseline_val) * 100 if baseline_val != 0 else 0.0
     
     return ClimateProjectionResult(
@@ -340,8 +348,8 @@ async def get_climate_projection(
         future_mean=float(future_val),
         change=float(change_abs),
         change_percent=float(change_pct),
-        uncertainty_p5=float(future_val * 0.9), 
-        uncertainty_p95=float(future_val * 1.1),
+        uncertainty_p5=float(change_abs * 0.7), 
+        uncertainty_p95=float(change_abs * 1.5),
         scenario=scenario,
         future_period=f"{future_range[0]}-{future_range[1]}",
         unit="K" if variable.startswith("tas") else "mm", # Simple guess

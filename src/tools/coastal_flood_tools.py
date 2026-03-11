@@ -9,6 +9,7 @@ v3.2 Changes:
 """
 
 from typing import Optional
+import math
 
 from src.core.models import (
     Location, HazardIntensity, HazardEventContext,
@@ -84,7 +85,12 @@ async def assess_coastal_flood(
     inundation_p5 = max(0, slr_p5 + tidal_range_m / 2 - effective_elevation)
     inundation_p95 = max(0, total_water_level_p95 - effective_elevation)
 
-    is_coastal = effective_elevation < 10
+    # Global distance-to-coast using Natural Earth land polygon boundaries
+    from src.data.coastline import get_distance_to_coast_km
+
+    dist_km = get_distance_to_coast_km(lat, lon)
+    is_coastal = effective_elevation < 5 and dist_km < 5.0
+
     if not is_coastal:
         confidence = ConfidenceLevel.HIGH
         inundation_depth = 0.0
