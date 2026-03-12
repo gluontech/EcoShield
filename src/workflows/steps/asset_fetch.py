@@ -6,10 +6,13 @@ from typing import Dict, Any, List
 from src.core.models.geometry import BoundingBox
 from src.core.models.surface import BuildingAdjustedSurface
 from src.core.models.asset import BuildingCluster
-from src.core.models.enums import StructureCategory, StructureType
+from src.core.models.enums import (
+    BuildingOccupancy, StructureCategory, StructureType,
+)
 from src.data.open_buildings import OpenBuildingsSource
 from src.data.elevation import get_elevation, get_elevation_footprint
 from src.data.spatial_matcher import SpatialMatcher, SpatialMatchContext
+from src.data.structure_expectations import get_expectation
 from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -235,6 +238,29 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
 
     structures = matched_structures
     logger.info(f"Kept {len(structures)} buildings after spatial matching")
+
+    # ------------------------------------------------------------------
+    # Infer occupancy from request structure category / type
+    # ------------------------------------------------------------------
+    # When the request specifies a structure type (e.g. shopping_mall) or
+    # category (e.g. commercial), use the StructureExpectation table to
+    # derive the expected occupancy and apply it to matched structures
+    # that still have UNKNOWN occupancy.  This drives the occupancy-aware
+    # floor-to-floor height used for story estimation.
+    expectation = get_expectation(structure_type, structure_category)
+    if expectation and structures:
+        inferred_occ = expectation.expected_occupancy
+        for st in structures:
+            if st.occupancy == BuildingOccupancy.UNKNOWN:
+                st.occupancy = inferred_occ
+                # Re-sync estimated_stories with the new occupancy so
+                # the floor-to-floor height ratio is correct.
+                if st.height is not None:
+                    st.height.estimated_stories = st.num_stories
+        logger.info(
+            f"Inferred occupancy '{inferred_occ.value}' from request "
+            f"structure type/category"
+        )
 
     # ------------------------------------------------------------------
     # Build cluster + elevation surfaces
