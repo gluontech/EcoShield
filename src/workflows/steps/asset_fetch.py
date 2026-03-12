@@ -135,7 +135,9 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
         try:
             import ee
             from src.core.models.asset import BuildingHeight
-            from src.core.models.enums import DataSource
+            from src.core.models.enums import (
+                DataSource, BuildingMaterial, VulnerabilityClass,
+            )
             
             logger.info("Enriching Overture buildings with Google Earth Engine heights...")
             height_image = await asyncio.to_thread(asset_source._fetch_heights_gee, bbox, 2023)
@@ -164,6 +166,7 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
                         ).getInfo()
                     )
                     
+                    enriched_indices: list[int] = []
                     for f in stats.get('features', []):
                         props = f.get('properties', {})
                         idx = props.get('idx')
@@ -177,6 +180,28 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
                                 height_year=2023,
                                 building_presence=p
                             )
+                            enriched_indices.append(idx)
+
+                    # Re-infer material/vulnerability for structures that
+                    # just received GEE height.  The initial inference in
+                    # to_structural_characteristics() could not see height
+                    # data, so it fell back to the SEA masonry default.
+                    for idx in enriched_indices:
+                        st = structures[idx]
+                        height_m = st.height.height_m if st.height else None
+                        area_m2 = st.footprint.area_m2
+
+                        if height_m and height_m > 15:
+                            st.material = BuildingMaterial.CONCRETE_REINFORCED
+                            st.vulnerability_class = VulnerabilityClass.CLASS_IV_REINFORCED
+                        elif area_m2 > 1000:
+                            st.material = BuildingMaterial.CONCRETE_REINFORCED
+                            st.vulnerability_class = VulnerabilityClass.CLASS_IV_REINFORCED
+
+                        # Keep classification_source updated
+                        if st.material != BuildingMaterial.MASONRY_UNREINFORCED:
+                            st.classification_source = "area_height_inference"
+
         except Exception as e:
             logger.warning(f"Failed to enrich heights from GEE (non-fatal): {e}")
 

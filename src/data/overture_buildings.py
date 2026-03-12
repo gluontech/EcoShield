@@ -421,14 +421,24 @@ class OvertureBuildingsSource:
 
             occupancy = b.get('mapped_occupancy', BuildingOccupancy.UNKNOWN)
 
-            # Material inference — uses resolved height (includes num_floors estimate)
+            # Material inference — uses height and footprint area.
+            # Priority: height > 15m OR large footprint (> 1000 m²) → reinforced
+            # concrete, since SEA commercial/industrial structures of that scale
+            # almost always use RC framing.  Tiny footprints (< 30 m²) are
+            # informal bamboo/thatch.  Everything else defaults to masonry.
             material = BuildingMaterial.MASONRY_UNREINFORCED  # SEA default
             vuln_class = VulnerabilityClass.CLASS_III_MASONRY
+
+            effective_area = b.get('area_m2', 0) or 0
 
             if height_m_val and height_m_val > 15:
                 material = BuildingMaterial.CONCRETE_REINFORCED
                 vuln_class = VulnerabilityClass.CLASS_IV_REINFORCED
-            elif b.get('area_m2', 0) < 30:
+            elif effective_area > 1000:
+                # Large-footprint structures (malls, warehouses, factories)
+                material = BuildingMaterial.CONCRETE_REINFORCED
+                vuln_class = VulnerabilityClass.CLASS_IV_REINFORCED
+            elif effective_area < 30:
                 material = BuildingMaterial.BAMBOO_THATCH
                 vuln_class = VulnerabilityClass.CLASS_I_INFORMAL
             

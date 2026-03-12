@@ -15,7 +15,7 @@ structure-level damage estimation (HxE×V per building).
 
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from datetime import datetime
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, model_validator
 from .enums import (
     DataSource, BuildingMaterial, BuildingOccupancy, VulnerabilityClass,
     ConfidenceLevel
@@ -111,14 +111,31 @@ class BuildingHeight(BaseModel):
         None, ge=1, le=200,
         description="Actual floor count from Overture/OSM (takes priority over height estimation)"
     )
+    estimated_stories: Optional[int] = Field(
+        None, ge=1,
+        description=(
+            "Best-available story count. Set from num_floors when "
+            "available, otherwise populated by StructuralCharacteristics "
+            "using an occupancy-aware floor-to-floor height ratio."
+        ),
+    )
 
-    @computed_field
-    @property
-    def estimated_stories(self) -> int:
-        """Number of stories: prefer actual num_floors, else estimate from height."""
-        if self.num_floors:
-            return self.num_floors
-        return max(1, round(self.height_m / 3.0))
+
+# Occupancy-aware floor-to-floor heights (metres) for story estimation.
+# Used by StructuralCharacteristics.num_stories when actual floor count
+# is unavailable but height data exists.
+_FLOOR_HEIGHT_BY_OCCUPANCY: Dict[str, float] = {
+    BuildingOccupancy.RESIDENTIAL_SINGLE: 3.0,
+    BuildingOccupancy.RESIDENTIAL_MULTI: 3.0,
+    BuildingOccupancy.RESIDENTIAL_INFORMAL: 2.8,
+    BuildingOccupancy.COMMERCIAL: 4.5,       # retail/mall high ceilings, mezzanines
+    BuildingOccupancy.INDUSTRIAL: 6.0,       # tall bays, warehouses
+    BuildingOccupancy.INSTITUTIONAL: 4.0,    # hospitals, schools — higher than resi
+    BuildingOccupancy.INFRASTRUCTURE: 4.0,
+    BuildingOccupancy.AGRICULTURAL: 4.0,
+    BuildingOccupancy.MIXED_USE: 3.5,
+    BuildingOccupancy.UNKNOWN: 3.5,          # conservative default
+}
 
 
 class StructuralCharacteristics(BaseModel):
@@ -196,11 +213,42 @@ class StructuralCharacteristics(BaseModel):
     
     @computed_field
     @property
-    def num_stories(self) -> int:
-        """Number of stories from height or default."""
-        if self.height:
-            return self.height.estimated_stories
-        return 1  # Default single-story for unknown
+    def num_stories(self) -> Optional[int]:
+        """Number of stories from floor count data or occupancy-aware estimate.
+
+        Priority:
+            1. Actual floor count from Overture/OSM (``num_floors``)
+            2. Height-based estimate using occupancy-aware floor-to-floor
+               heights (commercial buildings have higher ceilings than
+               residential).
+
+        Returns:
+            Best-available story count, or None when no height data
+            exists at all.
+        """
+        # 1. Prefer actual floor count
+        if self.height and self.height.num_floors is not None:
+            return self.height.num_floors
+
+        # 2. Estimate from height using occupancy-aware floor-to-floor ratio
+        if self.height and self.height.height_m > 0:
+            floor_h = _FLOOR_HEIGHT_BY_OCCUPANCY.get(self.occupancy, 3.5)
+            return max(1, round(self.height.height_m / floor_h))
+
+        return None
+
+    @model_validator(mode="after")
+    def _sync_estimated_stories(self) -> "StructuralCharacteristics":
+        """Populate height.estimated_stories from occupancy-aware num_stories.
+
+        BuildingHeight does not know the building's occupancy, so it cannot
+        compute an occupancy-aware floor estimate on its own.  This validator
+        runs after construction and writes the value back so that the
+        serialised response exposes it in the ``height`` block as well.
+        """
+        if self.height is not None and self.height.estimated_stories is None:
+            self.height.estimated_stories = self.num_stories
+        return self
 
     @computed_field
     @property
