@@ -26,6 +26,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import httpx
+
 from src.config.settings import settings
 
 
@@ -87,7 +89,6 @@ def run_refresh(cities: list[str]):
 
 def _download_ibtracs():
     """Download latest IBTrACS WP basin CSV."""
-    import httpx
     
     url = (
         "https://www.ncei.noaa.gov/data/"
