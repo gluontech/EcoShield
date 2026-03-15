@@ -119,8 +119,6 @@ GEBCO_PATH: str = "data/gebco"
 """
 NASA NEX-GDDP-CMIP6 Data Access Layer.
 
-Replaces: cmip6_vn.py (CMIP6-VN, Vietnam-only, manual download)
-
 Data Source : NASA Earth Exchange Global Daily Downscaled Projections
               https://www.nccs.nasa.gov/services/data-collections/land-based-products/nex-gddp-cmip6
 Resolution  : 0.25° (~25 km)

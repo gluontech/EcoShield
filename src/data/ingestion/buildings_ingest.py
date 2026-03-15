@@ -12,14 +12,13 @@ Target cities: HCMC, Hanoi, Da Nang, Jakarta, Manila, Bangkok, Singapore.
 """
 
 import asyncio
+import json
 import logging
-from typing import List
-from pathlib import Path
 
+from src.config.settings import settings
 from src.core.models.geometry import BoundingBox
 from src.data.open_buildings import OpenBuildingsSource
 from src.data.overture_buildings import OvertureBuildingsSource
-from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +87,6 @@ async def ingest_city_buildings(city: str, db_url: str = "sqlite:///:memory:") -
     # Save Overture Buildings
     if overture_enriched:
         overture_file = output_dir / f"{city}_overture_buildings.json"
-        import json
         with open(overture_file, "w") as f:
             json.dump(overture_enriched, f, default=str)
             
@@ -96,7 +94,6 @@ async def ingest_city_buildings(city: str, db_url: str = "sqlite:///:memory:") -
     # Ideally we would spatial deduplicate (prefer Google over Overture)
     combined = [s.model_dump() for s in structures] + overture_enriched
     combined_file = output_dir / f"{city}_combined_buildings.json"
-    import json
     with open(combined_file, "w") as f:
         json.dump(combined, f, default=str)
 

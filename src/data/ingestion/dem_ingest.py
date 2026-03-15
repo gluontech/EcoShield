@@ -8,20 +8,19 @@ Downloads 1°x1° COG tiles covering configured city bounding boxes.
 import argparse
 from pathlib import Path
 
-import numpy as np
 import boto3
+import numpy as np
 from botocore import UNSIGNED
 from botocore.config import Config
 
 from src.config.settings import settings
-
+from src.data.ingestion.nex_gddp_ingest import CITY_BBOXES
 
 S3_BUCKET = settings.COPERNICUS_DEM_S3_BUCKET
 CACHE = Path(settings.COPERNICUS_DEM_LOCAL_CACHE)
 CACHE.mkdir(parents=True, exist_ok=True)
 
 # Reuse city bboxes from nex_gddp_ingest
-from src.data.ingestion.nex_gddp_ingest import CITY_BBOXES
 
 
 def _tile_key(lat: int, lon: int) -> str:

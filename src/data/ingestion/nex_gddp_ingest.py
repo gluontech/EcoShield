@@ -11,11 +11,11 @@ from pathlib import Path
 from typing import List
 
 import boto3
+import xarray as xr
 from botocore import UNSIGNED
 from botocore.config import Config
 
 from src.config.settings import settings
-
 
 S3_BUCKET = settings.NEX_GDDP_S3_BUCKET
 CACHE = Path(settings.NEX_GDDP_LOCAL_CACHE)
@@ -76,8 +76,6 @@ def ingest(cities: List[str], dry_run: bool = False):
                         
                         # --- Optimization: Crop to SEA Region & Delete Original ---
                         try:
-                            import xarray as xr
-                            
                             # Define Vietnam-focused bounds
                             # Covers HCMC, Hanoi, Da Nang with buffer
                             
