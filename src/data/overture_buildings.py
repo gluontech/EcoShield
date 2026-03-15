@@ -429,7 +429,7 @@ class OvertureBuildingsSource:
             material = BuildingMaterial.MASONRY_UNREINFORCED  # SEA default
             vuln_class = VulnerabilityClass.CLASS_III_MASONRY
 
-            effective_area = b.get('area_m2', 0) or 0
+            effective_area = footprint.area_m2
 
             if height_m_val and height_m_val > 15:
                 material = BuildingMaterial.CONCRETE_REINFORCED
