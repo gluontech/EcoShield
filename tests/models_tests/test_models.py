@@ -92,7 +92,9 @@ def test_building_height_confidence():
         height_year=2023,
         height_confidence=0.4  # Low confidence
     )
-    assert h.estimated_stories == 4
+    # estimated_stories is None on standalone BuildingHeight without num_floors
+    # (populated later by StructuralCharacteristics with occupancy-aware ratio)
+    assert h.estimated_stories is None
     assert h.height_confidence == 0.4
 
 def test_structural_characteristics_effective_floor():

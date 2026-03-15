@@ -225,7 +225,7 @@ async def assess_structure_risk(
             longitude=structure.footprint.centroid.lon,
             footprint_area_m2=getattr(structure.footprint, "area_m2", None),
             height_m=getattr(structure, "height_m", None),
-            num_stories=getattr(structure, "num_stories", 1),
+            num_stories=getattr(structure, "num_stories", None) or 1,
             vulnerability_class=vuln_class,
             ground_floor_elevation_m=structure.effective_ground_floor_m,
             replacement_value_usd=round(replacement, 0),

@@ -41,6 +41,8 @@ async def assess_site(request: AssessRequest):
             include_buildings=True,
             multi_rp=len(request.return_periods) > 1,
             return_periods=request.return_periods,
+            structure_category=request.structure.category,
+            structure_type=request.structure.type,
         )
     except FileNotFoundError as e:
         raise HTTPException(

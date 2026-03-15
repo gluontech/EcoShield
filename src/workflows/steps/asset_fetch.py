@@ -6,10 +6,13 @@ from typing import Dict, Any, List
 from src.core.models.geometry import BoundingBox
 from src.core.models.surface import BuildingAdjustedSurface
 from src.core.models.asset import BuildingCluster
-from src.core.models.enums import StructureCategory, StructureType
+from src.core.models.enums import (
+    BuildingOccupancy, StructureCategory, StructureType,
+)
 from src.data.open_buildings import OpenBuildingsSource
 from src.data.elevation import get_elevation, get_elevation_footprint
 from src.data.spatial_matcher import SpatialMatcher, SpatialMatchContext
+from src.data.structure_expectations import get_expectation
 from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -135,7 +138,9 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
         try:
             import ee
             from src.core.models.asset import BuildingHeight
-            from src.core.models.enums import DataSource
+            from src.core.models.enums import (
+                DataSource, BuildingMaterial, VulnerabilityClass,
+            )
             
             logger.info("Enriching Overture buildings with Google Earth Engine heights...")
             height_image = await asyncio.to_thread(asset_source._fetch_heights_gee, bbox, 2023)
@@ -164,6 +169,7 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
                         ).getInfo()
                     )
                     
+                    enriched_indices: list[int] = []
                     for f in stats.get('features', []):
                         props = f.get('properties', {})
                         idx = props.get('idx')
@@ -177,6 +183,28 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
                                 height_year=2023,
                                 building_presence=p
                             )
+                            enriched_indices.append(idx)
+
+                    # Re-infer material/vulnerability for structures that
+                    # just received GEE height.  The initial inference in
+                    # to_structural_characteristics() could not see height
+                    # data, so it fell back to the SEA masonry default.
+                    for idx in enriched_indices:
+                        st = structures[idx]
+                        height_m = st.height.height_m if st.height else None
+                        area_m2 = st.footprint.area_m2
+
+                        if height_m and height_m > 15:
+                            st.material = BuildingMaterial.CONCRETE_REINFORCED
+                            st.vulnerability_class = VulnerabilityClass.CLASS_IV_REINFORCED
+                        elif area_m2 > 1000:
+                            st.material = BuildingMaterial.CONCRETE_REINFORCED
+                            st.vulnerability_class = VulnerabilityClass.CLASS_IV_REINFORCED
+
+                        # Keep classification_source updated
+                        if st.material != BuildingMaterial.MASONRY_UNREINFORCED:
+                            st.classification_source = "area_height_inference"
+
         except Exception as e:
             logger.warning(f"Failed to enrich heights from GEE (non-fatal): {e}")
 
@@ -210,6 +238,29 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
 
     structures = matched_structures
     logger.info(f"Kept {len(structures)} buildings after spatial matching")
+
+    # ------------------------------------------------------------------
+    # Infer occupancy from request structure category / type
+    # ------------------------------------------------------------------
+    # When the request specifies a structure type (e.g. shopping_mall) or
+    # category (e.g. commercial), use the StructureExpectation table to
+    # derive the expected occupancy and apply it to matched structures
+    # that still have UNKNOWN occupancy.  This drives the occupancy-aware
+    # floor-to-floor height used for story estimation.
+    expectation = get_expectation(structure_type, structure_category)
+    if expectation and structures:
+        inferred_occ = expectation.expected_occupancy
+        for st in structures:
+            if st.occupancy == BuildingOccupancy.UNKNOWN:
+                st.occupancy = inferred_occ
+                # Re-sync estimated_stories with the new occupancy so
+                # the floor-to-floor height ratio is correct.
+                if st.height is not None:
+                    st.height.estimated_stories = st.num_stories
+        logger.info(
+            f"Inferred occupancy '{inferred_occ.value}' from request "
+            f"structure type/category"
+        )
 
     # ------------------------------------------------------------------
     # Build cluster + elevation surfaces
