@@ -27,7 +27,7 @@ trigger: always_on
 - Never introduce blocking calls inside a coroutine. Use `asyncio.to_thread()` or an executor to wrap unavoidably blocking third-party code.
 
 ```python
-# ✅ Correct — offload blocking I/O
+# Correct — offload blocking I/O
 import asyncio
 
 async def read_large_file(path: str) -> str:
@@ -44,11 +44,11 @@ def _blocking_read(path: str) -> str:
 - Use `asyncio.get_event_loop()` only at the top-level entry point; prefer `asyncio.run()` there instead.
 
 ```python
-# ❌ Forbidden — blocks the event loop
+# Forbidden — blocks the event loop
 async def fetch_data(url: str) -> bytes:
     return requests.get(url).content          # sync inside async
 
-# ✅ Correct
+# Correct
 import httpx
 
 async def fetch_data(url: str) -> bytes:
@@ -63,7 +63,7 @@ async def fetch_data(url: str) -> bytes:
 - Cancel tasks gracefully — always `await task.cancel()` and handle `asyncio.CancelledError`.
 
 ```python
-# ✅ Structured concurrency with timeout
+# Structured concurrency with timeout
 async def fetch_all(urls: list[str]) -> list[bytes]:
     async with asyncio.TaskGroup() as tg:
         tasks = [
@@ -187,7 +187,7 @@ async def get_user(user_id: int) -> User:
 - Each test must be independent; never rely on test execution order.
 
 ```python
-# ✅ Async test example
+# Async test example
 import pytest
 from unittest.mock import AsyncMock, patch
 
