@@ -80,6 +80,10 @@ async def run_hazard_assessment(
     return_periods: list = None,                   # NEW v3.2 (Gap Q)
     structure_category: str = None,
     structure_type: str = None,
+    roof_type: str = None,
+    wall_material: str = None,
+    ground_floor_height_m: float = None,
+    num_floors: int = None,
 ) -> FullRiskProfile:
     """
     Run full multi-hazard assessment for a single location using the async pipeline.
@@ -109,6 +113,10 @@ async def run_hazard_assessment(
         "building_radius_m": building_radius_m,
         "structure_category": structure_category,
         "structure_type": structure_type,
+        "roof_type": roof_type,
+        "wall_material": wall_material,
+        "ground_floor_height_m": ground_floor_height_m,
+        "num_floors": num_floors,
     }
 
     # Execute the pipeline

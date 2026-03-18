@@ -43,6 +43,10 @@ async def assess_site(request: AssessRequest):
             return_periods=request.return_periods,
             structure_category=request.structure.category,
             structure_type=request.structure.type,
+            roof_type=request.structure.roof_type,
+            wall_material=request.structure.wall_material,
+            ground_floor_height_m=request.structure.ground_floor_height_m,
+            num_floors=request.structure.num_floors,
         )
     except FileNotFoundError as e:
         raise HTTPException(
@@ -170,7 +174,7 @@ def _extract_asset(hazards_data: dict) -> dict:
                 "num_floors": height_raw.get("num_floors"),
                 "estimated_stories": height_raw.get("estimated_stories"),
             },
-            "material": structure.get("material", "unknown"),
+            "structural_material": structure.get("material", "unknown"),
             "material_inferred": structure.get("material_inferred", True),
             "occupancy": structure.get("occupancy", "unknown"),
             "vulnerability_class": structure.get("vulnerability_class", "class_iii"),

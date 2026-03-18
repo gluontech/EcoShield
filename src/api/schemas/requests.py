@@ -20,6 +20,8 @@ from src.core.models.enums import (
     ResponseProfile,
     StructureCategory,
     StructureType,
+    RoofType,
+    WallMaterial,
 )
 
 # Valid structure_type values per category — used for cross-validation
@@ -78,6 +80,10 @@ class Structure(BaseModel):
     name: Optional[str] = Field(None, description="Building or asset name")
     address: Optional[str] = Field(None, description="Physical address")
     description: Optional[str] = Field(None, description="Additional context or description")
+    roof_type: Optional[RoofType] = Field(None, description="Premium: Roof structural type")
+    wall_material: Optional[WallMaterial] = Field(None, description="Premium: Exterior wall material")
+    ground_floor_height_m: Optional[float] = Field(None, ge=0, description="Premium: Height of first floor above grade")
+    num_floors: Optional[int] = Field(None, ge=1, description="Premium: Total number of floors")
 
     @field_validator("type")
     @classmethod

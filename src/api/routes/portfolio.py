@@ -40,6 +40,12 @@ async def assess_portfolio(request: PortfolioRequest):
                     return_period=request.return_periods[0],
                     multi_rp=len(request.return_periods) > 1,
                     return_periods=request.return_periods,
+                    structure_category=site.structure.category if site.structure else None,
+                    structure_type=site.structure.type if site.structure else None,
+                    roof_type=site.structure.roof_type if site.structure else None,
+                    wall_material=site.structure.wall_material if site.structure else None,
+                    ground_floor_height_m=site.structure.ground_floor_height_m if site.structure else None,
+                    num_floors=site.structure.num_floors if site.structure else None,
                 )
             except Exception:
                 return PortfolioSiteResult(
