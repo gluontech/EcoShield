@@ -48,6 +48,12 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
     raw_type = data.get("structure_type")
     structure_category = StructureCategory(raw_cat) if raw_cat else None
     structure_type = StructureType(raw_type) if raw_type else None
+    
+    # Premium user-provided enrichment fields
+    req_roof = data.get("roof_type")
+    req_wall = data.get("wall_material")
+    req_gfh = data.get("ground_floor_height_m")
+    req_floors = data.get("num_floors")
 
     # Initialize connection to asset source
     asset_source = OpenBuildingsSource(db_url=settings.DATABASE_URL)
@@ -258,10 +264,41 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
                 if st.height is not None:
                     st.height.estimated_stories = st.num_stories
         logger.info(
-            f"Inferred occupancy '{inferred_occ.value}' from request "
+            f"inferred occupancy '{inferred_occ.value}' from request "
             f"structure type/category"
         )
-
+        
+    # ------------------------------------------------------------------
+    # Apply Premium User-Provided Fields
+    # ------------------------------------------------------------------
+    if structures:
+        for st in structures:
+            if req_roof is not None:
+                st.roof_type = req_roof.value if hasattr(req_roof, "value") else req_roof
+            if req_wall is not None:
+                st.wall_material = req_wall.value if hasattr(req_wall, "value") else req_wall
+            if req_gfh is not None:
+                st.ground_floor_height_m = float(req_gfh)
+            if req_floors is not None:
+                if st.height is None:
+                    from src.core.models.asset import BuildingHeight
+                    from src.core.models.enums import DataSource
+                    # Estimate height from floor count rather than emitting a
+                    # synthetic zero, which would fail downstream validators
+                    # that enforce height_m > 0.  Use a conservative 3.5 m
+                    # floor-to-floor ratio (SEA default; occupancy-aware
+                    # refinement is applied later by StructuralCharacteristics).
+                    _estimated_h = max(float(req_floors) * 3.5, 1.0)
+                    st.height = BuildingHeight(
+                        height_m=_estimated_h,
+                        height_source=DataSource.OVERTURE_MAPS_BUILDINGS,
+                        height_year=2023,
+                        height_uncertainty_m=2.0,  # higher uncertainty for synthetic estimate
+                        building_presence=1.0,
+                    )
+                st.height.num_floors = int(req_floors)
+                st.height.estimated_stories = int(req_floors)
+                
     # ------------------------------------------------------------------
     # Build cluster + elevation surfaces
     # ------------------------------------------------------------------

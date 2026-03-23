@@ -110,6 +110,22 @@ class VulnerabilityClass(str, Enum):
     CLASS_IV_REINFORCED = "class_iv"  # Reinforced concrete/steel
 
 
+class RoofType(str, Enum):
+    """Specific roof type of a building (premium enrichment)."""
+    FLAT = "flat"
+    GABLE = "gable"
+    HIP = "hip"
+
+
+class WallMaterial(str, Enum):
+    """Specific wall material of a building (premium enrichment)."""
+    GLASS_CURTAIN = "glass_curtain"
+    MASONRY = "masonry"
+    PRECAST_CONCRETE = "precast_concrete"
+    METAL_PANEL = "metal_panel"
+    WOOD = "wood"
+
+
 class StructureCategory(str, Enum):
     """Top-level building category for spatial matching QA."""
     RESIDENTIAL = "residential"

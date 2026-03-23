@@ -54,6 +54,7 @@ async def assess_buildings(request: BuildingAssessRequest):
             building_radius_m=request.radius_m,
             multi_rp=len(request.return_periods) > 1,
             return_periods=request.return_periods,
+            # No premium structure fields are passed in BuildingAssessRequest natively, omitting.
         )
     except FileNotFoundError as e:
         raise HTTPException(

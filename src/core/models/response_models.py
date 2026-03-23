@@ -217,7 +217,7 @@ class Asset(_Base):
 
     footprint: BuildingFootprint
     height: BuildingHeight
-    material: BuildingMaterial
+    structural_material: BuildingMaterial
     material_inferred: bool
     occupancy: str
     vulnerability_class: VulnerabilityClass
