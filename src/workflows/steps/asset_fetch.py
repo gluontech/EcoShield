@@ -283,10 +283,17 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
                 if st.height is None:
                     from src.core.models.asset import BuildingHeight
                     from src.core.models.enums import DataSource
+                    # Estimate height from floor count rather than emitting a
+                    # synthetic zero, which would fail downstream validators
+                    # that enforce height_m > 0.  Use a conservative 3.5 m
+                    # floor-to-floor ratio (SEA default; occupancy-aware
+                    # refinement is applied later by StructuralCharacteristics).
+                    _estimated_h = max(float(req_floors) * 3.5, 1.0)
                     st.height = BuildingHeight(
-                        height_m=0.0,
+                        height_m=_estimated_h,
                         height_source=DataSource.OVERTURE_MAPS_BUILDINGS,
                         height_year=2023,
+                        height_uncertainty_m=2.0,  # higher uncertainty for synthetic estimate
                         building_presence=1.0,
                     )
                 st.height.num_floors = int(req_floors)
