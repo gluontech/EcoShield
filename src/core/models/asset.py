@@ -66,7 +66,7 @@ class BuildingFootprint(BaseModel):
     )
     match_method: Optional[str] = Field(
         None,
-        description="How this building was matched: containment, buffer_overlap, confidence_scored, centroid_distance"
+        description="How this building was matched: containment, buffer_overlap, centroid, centroid_distance, exact, or low_confidence variants"
     )
 
     model_config = {"arbitrary_types_allowed": True}

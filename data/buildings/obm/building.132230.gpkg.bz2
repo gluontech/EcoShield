@@ -1,0 +1,306 @@
+
+
+
+
+<!DOCTYPE html>
+<html 
+      lang="de">
+  <head>
+    <title>
+      
+  OpenBuildingMap - uMap - Online map creator
+
+    </title>
+    <meta charset="utf-8">
+    <meta name="description"
+          content="Mit uMap kannst du Karten mit OpenStreetMap-Ebenen in einer Minute erstellen und in deine Seite einbinden.">
+    <meta name="keywords" content="map, umap">
+    
+  
+  
+
+
+
+<link rel="stylesheet"
+      href="/static/umap/vendors/leaflet/leaflet.f18ae622e307.css" />
+<link rel="stylesheet"
+      href="/static/umap/vendors/minimap/Control.MiniMap.min.f5616cda6e8e.css" />
+<link rel="stylesheet"
+      href="/static/umap/vendors/measurable/Leaflet.Measurable.e0d4c475cd42.css" />
+<link rel="stylesheet"
+      href="/static/umap/vendors/fullscreen/leaflet.fullscreen.6dd7f1493d15.css" />
+<link rel="stylesheet" href="/static/umap/vars.2d0384e3de9c.css" />
+<link rel="stylesheet" href="/static/umap/font.abdc7e1f8eb9.css" />
+<link rel="stylesheet" href="/static/umap/base.c47aabe104a4.css" />
+<link rel="stylesheet" href="/static/umap/css/popup.4abfa93c1b72.css" />
+<link rel="stylesheet" href="/static/umap/css/form.b2747bb2fadd.css" />
+<link rel="stylesheet" href="/static/umap/css/icon.9dccf8f5fa62.css" />
+<link rel="stylesheet" href="/static/umap/content.a405f3b19a48.css" />
+<link rel="stylesheet" href="/static/umap/nav.6694118cd97a.css" />
+<link rel="stylesheet" href="/static/umap/map.c06df761ec4c.css" />
+<link rel="stylesheet" href="/static/umap/css/slideshow.da8522a97215.css" />
+<link rel="stylesheet" href="/static/umap/css/contextmenu.8dd5a47e9b7c.css" />
+<link rel="stylesheet" href="/static/umap/css/panel.6386113b8369.css" />
+<link rel="stylesheet" href="/static/umap/css/window.14807e0243cf.css" />
+<link rel="stylesheet" href="/static/umap/css/tooltip.a36b731ab511.css" />
+<link rel="stylesheet" href="/static/umap/css/dialog.1584daef35ed.css" />
+<link rel="stylesheet" href="/static/umap/css/importers.eede1d0d52fc.css" />
+<link rel="stylesheet" href="/static/umap/css/tableeditor.e51ce47ee59d.css" />
+<link rel="stylesheet" href="/static/umap/css/bar.ef4307d7b637.css" />
+<link rel="stylesheet" href="/static/umap/css/browser.be94a512cfdb.css" />
+<link rel="stylesheet" href="/static/umap/theme.ee5fbe5d7c75.css" />
+
+
+  
+      
+
+    
+  
+
+
+<script type="importmap">
+  {
+    "imports": {
+      "@turf/meta": "/static/umap/vendors/turf/meta/index.018aa83fbe3a.js",
+      "@turf/helpers": "/static/umap/vendors/turf/helpers/index.67f292f2a2bb.js",
+      "@turf/flatten": "/static/umap/vendors/turf/flatten/index.880908746691.js",
+      "@turf/invariant": "/static/umap/vendors/turf/invariant/index.81ead8dc1a3b.js",
+      "@turf/distance": "/static/umap/vendors/turf/distance/index.69084e3905ec.js",
+      "@turf/clean-coords": "/static/umap/vendors/turf/clean-coords/index.338d18c7278e.js",
+      "@turf/boolean-point-on-line": "/static/umap/vendors/turf/boolean-point-on-line/index.24acf7733c3a.js",
+      "@turf/boolean-point-in-polygon": "/static/umap/vendors/turf/boolean-point-in-polygon/index.ac13e977adad.js",
+      "@turf/point-to-line-distance": "/static/umap/vendors/turf/point-to-line-distance/index.5ba68ba2a2b8.js",
+      "@turf/nearest-point-on-line": "/static/umap/vendors/turf/nearest-point-on-line/index.d0026dcaeecd.js",
+      "@turf/rhumb-distance": "/static/umap/vendors/turf/rhumb-distance/index.42970f7003bf.js",
+      "point-in-polygon-hao": "/static/umap/vendors/point-in-polygon-hao/index.08c460cda201.js",
+      "robust-predicates": "/static/umap/vendors/robust-predicates/index.605ad297b46f.js",
+      "@turf/flip": "/static/umap/vendors/turf/flip/index.1be4995d8cb7.js",
+      "@turf/clone": "/static/umap/vendors/turf/clone/index.6f06593f436b.js",
+      "@turf/area": "/static/umap/vendors/turf/area/index.a126a2ee58ad.js",
+      "@turf/centroid": "/static/umap/vendors/turf/centroid/index.4953ca750ff1.js",
+      "@turf/length": "/static/umap/vendors/turf/length/index.3d820ef79cbc.js",
+      "@turf/bbox": "/static/umap/vendors/turf/bbox/index.44b7f48ef92a.js",
+      "leaflet": "/static/umap/vendors/leaflet/leaflet-src.esm.0e703c906b6c.js",
+      "ol/": "/static/umap/vendors/ol/",
+      "rbush": "/static/umap/vendors/rbush/index.4d640c6d5a5c.js",
+      "quickselect": "/static/umap/vendors/quickselect/index.1bb301aad985.js",
+      "osm2geojson": "/static/umap/vendors/osm2geojson/index.9e9f388cd926.mjs",
+      "colorbrewer": "/static/umap/vendors/colorbrewer/colorbrewer.f1daa1b2ade1.js",
+      "simple-statistics/": "/static/umap/vendors/simple-statistics/"
+    }
+  }
+</script>
+<script type="module"
+        src="/static/umap/vendors/leaflet/leaflet-src.esm.0e703c906b6c.js"
+        defer></script>
+<script type="module"
+        src="/static/umap/js/modules/leaflet-configure.b0145d0d7af2.js"
+        defer></script>
+<script src="/static/umap/vendors/heat/leaflet-heat.7c49f3d195e1.js" defer></script>
+
+  
+    <script src="/static/umap/locale/de.c8f9113ebf05.js" defer></script>
+  
+
+<script src="/static/umap/vendors/editable/Path.Drag.a0809fcb697e.js" defer></script>
+<script src="/static/umap/vendors/editable/Leaflet.Editable.7ba08dd861fd.js" defer></script>
+<script type="module" src="/static/umap/js/modules/global.dbfe361fa2c9.js" defer></script>
+<script src="/static/umap/vendors/minimap/Control.MiniMap.min.4c4b8e7e5ebf.js"
+        defer></script>
+<script src="/static/umap/vendors/csv2geojson/csv2geojson.56594ce16722.js" defer></script>
+<script src="/static/umap/vendors/fullscreen/Leaflet.fullscreen.min.17ff40b18ca8.js"
+        defer></script>
+<script src="/static/umap/vendors/measurable/Leaflet.Measurable.4c788e494421.js"
+        defer></script>
+<script src="/static/umap/vendors/textpath/leaflet.textpath.66511c23e1b2.js"
+        defer></script>
+<script src="/static/umap/js/umap.controls.f338f148bb55.js" defer></script>
+<script type="module" src="/static/umap/js/components/fragment.ed8b45e42041.js" defer></script>
+<script type="module" src="/static/umap/js/components/modal.7f98b8989e86.js" defer></script>
+<script type="module" src="/static/umap/js/components/copiable.ed04e9617914.js" defer></script>
+
+
+  
+    <meta name="robots" content="noindex,nofollow">
+  
+  <link rel="alternate"
+        type="application/json+oembed"
+        href="http://umap.openstreetmap.de/map/oembed/?url=http%3A%2F%2Fumap.openstreetmap.de%2Fde%2Fmap%2Fopenbuildingmap_81684&format=json"
+        title="OpenBuildingMap oEmbed URL" />
+  <meta property="og:url" content="https://umap.openstreetmap.de/de/map/openbuildingmap_81684" />
+  <meta property="og:title" content="OpenBuildingMap" />
+  <meta property="og:description" content="Buildings play a critical role in understanding human settlement patterns and are essential for processes in crisis manage-ment, urban planning, energy efficiency, and multi-hazard risk assessment. To address the need for comprehensive andaccessible global building data, we introduce a dataset containing 2.7 billion building footprints classified using the buildingtaxonomy of the Global Earthquake Model. This dataset is created by conflatingthe AI-derived Google Open Buildings and the Microsoft Global ML Building Footprints datasets, and the crowdsourcedOpenStreetMap, hence creating the most detailed and extensive building dataset to date. These AI-derived building footprints help balancing out the complete-ness bias in OpenStreetMap in which mapping is most complete in countries with high human developing index, althoughmajor gaps remain in certain countries and rural areas. In addition, occupancy types and building height estimation wasvalidated through distribution comparison using Kullback-Leibler divergence across specific cities, and through cadaster datafrom Slovenia and Greece. The quality and completeness of the resulting dataset is similar to the cadaster datasets, revealingthat, while some misclassifications occur due to definitional differences or data limitations, the dataset overall provides reliableand valuable building information at global scale. Among other applications, one could reuse the data to identify vulnerabilitiesof buildings for natural hazards, to model population distributions based, or to calculate carbon footprints of buildings.
+
+The data paper is accessible via [[https://doi.org/10.1038/s41597-025-06132-z]].
+The data publication is accessible via [[https://doi.org/10.5880/GFZ.LKUT.2025.002]].
+" />
+  <meta property="og:site_name" content="uMap" />
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    
+    
+    <link rel="icon"
+          href="/static/umap/favicons/favicon.d00639428e40.ico"
+          sizes="32x32">
+    <link rel="icon"
+          href="/static/umap/favicons/icon.a93d14e37669.svg"
+          type="image/svg+xml">
+    <link rel="apple-touch-icon"
+          href="/static/umap/favicons/apple-touch-icon.02fdccd547b9.png">
+    <!-- 180×180 -->
+    <link rel="manifest" href="/manifest.webmanifest">
+    
+  </head>
+  <body class="
+  map_detail
+">
+    
+    
+    
+  
+    
+
+
+
+
+
+
+<style type="text/css">
+    @import "/static/umap/js/components/alerts/alert.eee42bd76843.css";
+</style>
+
+<template id="umap-alert-template">
+  <div role="dialog" class="dark window umap-alert">
+    <div>
+      <p role="alert">
+      </p>
+    </div>
+    <ul class="buttons">
+      <li>
+        <button class="icon icon-16 icon-close"
+                aria-label="Schließen"
+                data-close>
+        </button>
+      </li>
+    </ul>
+  </div>
+</template>
+<umap-alert></umap-alert>
+<template id="umap-alert-creation-template">
+  <div role="dialog" class="dark window umap-alert">
+    <div>
+      <h3 role="alert">
+      </h3>
+      <p class="aplat">
+        Oops, I didn't mean it, I want to <a href="/de/login/" class="login">create an account</a> or <a href="/de/login/" class="login">log in</a> (no worry, we'll attach the map to your account).
+      </p>
+      <div class="anonymous soft-rounded aplat">
+        <h4><i class="icon icon-16 icon-anonymous"></i> Ja, ich möchte weiter anonym editieren und ich werde die geheime Verknüpfung speichern, um über diese die Karte später, oder von einem anderen Gerät, weiter bearbeiten zu können</h4>
+        <div id="link-wrapper">
+          <form>
+            <label for="url">
+              Hier ist der geheime Link zum Bearbeiten der Karte, bitte bewahre ihn sicher auf:
+            </label>
+            <fieldset role="group">
+              <input type="url" name="url" id="url">
+              <input type="button" value="Link kopieren">
+            </fieldset>
+          </form>
+        </div>
+        <div id="form-wrapper" hidden>
+          <form>
+            <label for="email">
+              Gib Deine E-Mail-Adresse ein, um den geheimen Link zu gesendet zu bekommen:
+            </label>
+            <fieldset role="group">
+              <input type="email"
+                     name="email"
+                     id="email"
+                     placeholder="Email"
+                     required>
+              <input type="submit"
+                     value="Link verschicken"
+                     class="umap-action">
+            </fieldset>
+          </form>
+        </div>
+      </div>
+    </div>
+    <ul class="buttons">
+      <li>
+        <button class="icon icon-16 icon-close"
+                aria-label="Schließen"
+                data-close>
+        </button>
+      </li>
+    </ul>
+  </div>
+</template>
+<umap-alert-creation></umap-alert-creation>
+<template id="umap-alert-conflict-template">
+  <div role="dialog" class="dark window umap-alert">
+    <div>
+      <p role="alert">
+      </p>
+      <div id="conflict-wrapper">
+        <form>
+          <a href="#" onclick="document.url" target="_blank">Die Bearbeitungen in einem anderen Browser-Tab öffnen</a>
+          <input id="your-changes"
+                 type="submit"
+                 value="Behalte Deine Änderungen und verwirf die anderen">
+          <input id="their-changes"
+                 type="submit"
+                 value="Behalte die anderen Änderungen und verwirf Deine">
+        </form>
+      </div>
+    </div>
+    <ul class="buttons">
+      <li>
+        <button class="icon icon-16 icon-close"
+                aria-label="Schließen"
+                data-close>
+        </button>
+      </li>
+    </ul>
+  </div>
+</template>
+<umap-alert-conflict></umap-alert-conflict>
+
+<script type="module">
+  import { register } from '/static/umap/js/components/base.2dd4a3c5a47e.js'
+  import {
+    Alert,
+    AlertCreation,
+    AlertConflict
+  } from '/static/umap/js/components/alerts/alert.d10f407b9915.js'
+  register(Alert, 'umap-alert')
+  register(AlertCreation, 'umap-alert-creation')
+  register(AlertConflict, 'umap-alert-conflict')
+</script>
+
+
+
+
+<div id="map">
+</div>
+<!-- djlint:off -->
+<script id="map-settings" data-settings="{&quot;type&quot;: &quot;Feature&quot;, &quot;geometry&quot;: {&quot;type&quot;: &quot;Point&quot;, &quot;coordinates&quot;: [-5.625, 5.090944175033399]}, &quot;properties&quot;: {&quot;name&quot;: &quot;OpenBuildingMap&quot;, &quot;zoom&quot;: 3, &quot;rules&quot;: [], &quot;licence&quot;: {&quot;url&quot;: &quot;http://opendatacommons.org/licenses/odbl/&quot;, &quot;name&quot;: &quot;ODbL&quot;}, &quot;overlay&quot;: {}, &quot;tilelayer&quot;: {&quot;tms&quot;: false, &quot;name&quot;: &quot;Positron&quot;, &quot;maxZoom&quot;: 18, &quot;minZoom&quot;: 0, &quot;attribution&quot;: &quot;&amp;copy; [[http://www.openstreetmap.org/copyright|OpenStreetMap]] contributors, &amp;copy; [[https://carto.com/attributions|CARTO]]&quot;, &quot;url_template&quot;: &quot;https://cartodb-basemaps-{s}.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png?key=cb1_2ipg_1_a64e4bfb259752dcd3dc012c&quot;}, &quot;longCredit&quot;: &quot;GFZ Helmholz Centre for Geosciences&quot;, &quot;description&quot;: &quot;Buildings play a critical role in understanding human settlement patterns and are essential for processes in crisis manage-ment, urban planning, energy efficiency, and multi-hazard risk assessment. To address the need for comprehensive andaccessible global building data, we introduce a dataset containing 2.7 billion building footprints classified using the buildingtaxonomy of the Global Earthquake Model. This dataset is created by conflatingthe AI-derived Google Open Buildings and the Microsoft Global ML Building Footprints datasets, and the crowdsourcedOpenStreetMap, hence creating the most detailed and extensive building dataset to date. These AI-derived building footprints help balancing out the complete-ness bias in OpenStreetMap in which mapping is most complete in countries with high human developing index, althoughmajor gaps remain in certain countries and rural areas. In addition, occupancy types and building height estimation wasvalidated through distribution comparison using Kullback-Leibler divergence across specific cities, and through cadaster datafrom Slovenia and Greece. The quality and completeness of the resulting dataset is similar to the cadaster datasets, revealingthat, while some misclassifications occur due to definitional differences or data limitations, the dataset overall provides reliableand valuable building information at global scale. Among other applications, one could reuse the data to identify vulnerabilitiesof buildings for natural hazards, to model population distributions based, or to calculate carbon footprints of buildings.\n\nThe data paper is accessible via [[https://doi.org/10.1038/s41597-025-06132-z]].\nThe data publication is accessible via [[https://doi.org/10.5880/GFZ.LKUT.2025.002]].\n&quot;, &quot;limitBounds&quot;: {}, &quot;onLoadPanel&quot;: &quot;caption&quot;, &quot;shortCredit&quot;: &quot;Oostwegel et al. (2025)&quot;, &quot;zoomControl&quot;: true, &quot;permanentCredit&quot;: &quot;OpenBuildingMap \u00a9 [[https://www.gfz.de/|GFZ]]&quot;, &quot;fullscreenControl&quot;: true, &quot;displayPopupFooter&quot;: true, &quot;permanentCreditBackground&quot;: true, &quot;is_template&quot;: false, &quot;permissions&quot;: {&quot;edit_status&quot;: 2, &quot;share_status&quot;: 2, &quot;owner&quot;: {&quot;id&quot;: 10721, &quot;name&quot;: &quot;LaurensOostwegel&quot;, &quot;url&quot;: &quot;/de/user/LaurensOostwegel/&quot;}, &quot;editors&quot;: [], &quot;team&quot;: {&quot;id&quot;: 163, &quot;name&quot;: &quot;GFZ Section 2.6&quot;, &quot;url&quot;: &quot;/de/team/163/&quot;}}, &quot;author&quot;: {&quot;name&quot;: &quot;GFZ Section 2.6&quot;, &quot;url&quot;: &quot;/de/team/163/&quot;}, &quot;urls&quot;: {&quot;agnocomplete&quot;: &quot;/agnocomplete/AutocompleteUser/?q={q}&quot;, &quot;map_short_url&quot;: &quot;/m/{pk}/&quot;, &quot;ajax-proxy&quot;: &quot;/ajax-proxy/{ttl}/&quot;, &quot;password_change&quot;: &quot;/change-password/&quot;, &quot;password_change_done&quot;: &quot;/change-password-done/&quot;, &quot;set_language&quot;: &quot;/i18n/setlang/&quot;, &quot;map_oembed&quot;: &quot;/map/oembed/&quot;, &quot;map_download&quot;: &quot;/map/{map_id}/download/&quot;, &quot;home&quot;: &quot;/de/&quot;, &quot;search&quot;: &quot;https://photon.komoot.io/api/?&quot;, &quot;about&quot;: &quot;/de/about/&quot;, &quot;user_stars&quot;: &quot;/de/user/{identifier}/stars/&quot;, &quot;user_maps&quot;: &quot;/de/user/{identifier}/&quot;, &quot;team_maps&quot;: &quot;/de/team/{pk}/&quot;, &quot;login&quot;: &quot;/de/login/&quot;, &quot;login_popup_end&quot;: &quot;/de/login/popup/end/&quot;, &quot;logout&quot;: &quot;/de/logout/&quot;, &quot;map_anonymous_edit_url&quot;: &quot;/de/map/anonymous-edit/{signature}&quot;, &quot;pictogram_list_json&quot;: &quot;/de/pictogram/json/&quot;, &quot;template_list&quot;: &quot;/de/templates/json/&quot;, &quot;map_geojson&quot;: &quot;/de/map/{map_id}/geojson/&quot;, &quot;datalayer_view&quot;: &quot;/de/datalayer/{map_id}/{pk}/&quot;, &quot;datalayer_versions&quot;: &quot;/de/datalayer/{map_id}/{pk}/versions/&quot;, &quot;datalayer_version&quot;: &quot;/de/datalayer/{map_id}/{pk}/{ref}&quot;, &quot;map&quot;: &quot;/de/map/{slug}_{map_id}&quot;, &quot;map_preview&quot;: &quot;/de/map/&quot;, &quot;map_new&quot;: &quot;/de/map/new/&quot;, &quot;map_create&quot;: &quot;/de/map/create/&quot;, &quot;map_star&quot;: &quot;/de/map/{map_id}/star/&quot;, &quot;user_dashboard&quot;: &quot;/de/me&quot;, &quot;user_download&quot;: &quot;/de/me/download&quot;, &quot;user_teams&quot;: &quot;/de/me/teams&quot;, &quot;user_templates&quot;: &quot;/de/me/templates&quot;, &quot;team_new&quot;: &quot;/de/team/create/&quot;, &quot;whoami&quot;: &quot;/de/whoami&quot;, &quot;user_profile&quot;: &quot;/de/me/profile&quot;, &quot;team_update&quot;: &quot;/de/team/{pk}/edit/&quot;, &quot;team_delete&quot;: &quot;/de/team/{pk}/delete/&quot;, &quot;map_update&quot;: &quot;/de/map/{map_id}/update/settings/&quot;, &quot;map_update_permissions&quot;: &quot;/de/map/{map_id}/update/permissions/&quot;, &quot;map_delete&quot;: &quot;/de/map/{map_id}/update/delete/&quot;, &quot;map_clone&quot;: &quot;/de/map/{map_id}/update/clone/&quot;, &quot;datalayer_create&quot;: &quot;/de/map/{map_id}/datalayer/create/{pk}/&quot;, &quot;map_websocket_auth_token&quot;: &quot;/de/map/{map_id}/ws-token/&quot;, &quot;datalayer_delete&quot;: &quot;/de/map/{map_id}/datalayer/delete/{pk}/&quot;, &quot;datalayer_permissions&quot;: &quot;/de/map/{map_id}/datalayer/permissions/{pk}/&quot;, &quot;datalayer_update&quot;: &quot;/de/map/{map_id}/datalayer/update/{pk}/&quot;, &quot;map_attach_owner&quot;: &quot;/de/map/{map_id}/update/owner/&quot;, &quot;map_send_edit_link&quot;: &quot;/de/map/{map_id}/send-edit-link/&quot;, &quot;stats&quot;: &quot;/stats/&quot;, &quot;design_system&quot;: &quot;/design_system/&quot;, &quot;ws_sync&quot;: &quot;/ws/sync/{map_id}&quot;, &quot;routing&quot;: &quot;http://www.openstreetmap.org/directions?engine=osrm_car&amp;route={lat},{lng}&amp;locale={locale}#map={zoom}/{lat}/{lng}&quot;, &quot;ajax_proxy&quot;: &quot;/ajax-proxy/{ttl}/?url={url}&quot;, &quot;edit_in_osm&quot;: &quot;https://www.openstreetmap.org/edit#map={zoom}/{lat}/{lng}&quot;}, &quot;tilelayers&quot;: [{&quot;id&quot;: 2, &quot;name&quot;: &quot;openstreetmap-carto-de&quot;, &quot;url_template&quot;: &quot;https://tile.openstreetmap.de/{z}/{x}/{y}.png&quot;, &quot;minZoom&quot;: 0, &quot;maxZoom&quot;: 19, &quot;attribution&quot;: &quot;&amp;copy; [[http://www.openstreetmap.org/copyright|OpenStreetMap]] Mitwirkende&quot;, &quot;rank&quot;: 1, &quot;tms&quot;: false, &quot;selected&quot;: true}, {&quot;id&quot;: 11, &quot;name&quot;: &quot;OSM Carto&quot;, &quot;url_template&quot;: &quot;https://tile.openstreetmap.org/{z}/{x}/{y}.png&quot;, &quot;minZoom&quot;: 0, &quot;maxZoom&quot;: 18, &quot;attribution&quot;: &quot;Map data \u00a9 by Openstreetmap contributors, Map Style CC-BY-SA licence 2.0&quot;, &quot;rank&quot;: 2, &quot;tms&quot;: false}, {&quot;id&quot;: 1, &quot;name&quot;: &quot;Positron&quot;, &quot;url_template&quot;: &quot;https://cartodb-basemaps-{s}.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png?key=cb1_2ipg_1_a64e4bfb259752dcd3dc012c&quot;, &quot;minZoom&quot;: 0, &quot;maxZoom&quot;: 18, &quot;attribution&quot;: &quot;&amp;copy; [[http://www.openstreetmap.org/copyright|OpenStreetMap]] contributors, &amp;copy; [[https://carto.com/attributions|CARTO]]&quot;, &quot;rank&quot;: 2, &quot;tms&quot;: false}, {&quot;id&quot;: 3, &quot;name&quot;: &quot;OpenTopoMap&quot;, &quot;url_template&quot;: &quot;https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png&quot;, &quot;minZoom&quot;: 0, &quot;maxZoom&quot;: 17, &quot;attribution&quot;: &quot;\u00a9 OpenStreetMap-Mitwirkende, SRTM | Kartendarstellung: \u00a9 OpenTopoMap (CC-BY-SA)&quot;, &quot;rank&quot;: 3, &quot;tms&quot;: false}, {&quot;id&quot;: 4, &quot;name&quot;: &quot;\u00d6PNV-Karte&quot;, &quot;url_template&quot;: &quot;https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png&quot;, &quot;minZoom&quot;: 0, &quot;maxZoom&quot;: 18, &quot;attribution&quot;: &quot;Map data \u00a9 by Openstreetmap contributors, Map Style CC-BY-SA licence (\u00a9 by MeMoMaps)&quot;, &quot;rank&quot;: 4, &quot;tms&quot;: false}, {&quot;id&quot;: 5, &quot;name&quot;: &quot;Carto Dark&quot;, &quot;url_template&quot;: &quot;https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=cb1_2ipg_1_a64e4bfb259752dcd3dc012c&quot;, &quot;minZoom&quot;: 0, &quot;maxZoom&quot;: 18, &quot;attribution&quot;: &quot;\u00a9 CARTO&quot;, &quot;rank&quot;: 5, &quot;tms&quot;: false}, {&quot;id&quot;: 9, &quot;name&quot;: &quot;Humanitarian&quot;, &quot;url_template&quot;: &quot;https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png&quot;, &quot;minZoom&quot;: 0, &quot;maxZoom&quot;: 18, &quot;attribution&quot;: &quot;Map data \u00a9 by Openstreetmap contributors, Map tiles CCO licence HOTOSM&quot;, &quot;rank&quot;: 9, &quot;tms&quot;: false}, {&quot;id&quot;: 12, &quot;name&quot;: &quot;CyclOSM&quot;, &quot;url_template&quot;: &quot;https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png&quot;, &quot;minZoom&quot;: 0, &quot;maxZoom&quot;: 18, &quot;attribution&quot;: &quot;Map data \u00a9 by Openstreetmap contributors, Map Style: CyclOSM&quot;, &quot;rank&quot;: 11, &quot;tms&quot;: false}], &quot;editMode&quot;: &quot;disabled&quot;, &quot;schema&quot;: {&quot;iconUrl&quot;: {&quot;default&quot;: &quot;/static/umap/img/marker.svg&quot;}, &quot;tags&quot;: {&quot;choices&quot;: [[&quot;education&quot;, &quot;Bildung&quot;], [&quot;shopping&quot;, &quot;Einkaufsm\u00f6glichkeiten&quot;], [&quot;cycling&quot;, &quot;Fahrradfahren&quot;], [&quot;geopolitics&quot;, &quot;Geopolitik&quot;], [&quot;history&quot;, &quot;Geschichte&quot;], [&quot;health&quot;, &quot;Gesundheit&quot;], [&quot;business&quot;, &quot;Gewerblich&quot;], [&quot;arts&quot;, &quot;Kunst und Kultur&quot;], [&quot;food&quot;, &quot;Nahrungsmittel und Landwirtschaft&quot;], [&quot;public&quot;, &quot;\u00d6ffentlicher Sektor&quot;], [&quot;travel&quot;, &quot;Reisen&quot;], [&quot;sport&quot;, &quot;Sport und Freizeit&quot;], [&quot;tourism&quot;, &quot;Tourismus&quot;], [&quot;transports&quot;, &quot;Transport&quot;], [&quot;environment&quot;, &quot;Umwelt&quot;], [&quot;hiking&quot;, &quot;Wandern&quot;], [&quot;science&quot;, &quot;Wissenschaft&quot;]]}}, &quot;id&quot;: 81684, &quot;starred&quot;: false, &quot;stars&quot;: 0, &quot;licences&quot;: {&quot;No licence set&quot;: {&quot;name&quot;: &quot;No licence set&quot;, &quot;url&quot;: &quot;&quot;}, &quot;ODbL&quot;: {&quot;name&quot;: &quot;ODbL&quot;, &quot;url&quot;: &quot;http://opendatacommons.org/licenses/odbl/&quot;}}, &quot;umap_version&quot;: &quot;3.8.1&quot;, &quot;featuresHaveOwner&quot;: false, &quot;websocketEnabled&quot;: true, &quot;importers&quot;: {&quot;overpass&quot;: {&quot;url&quot;: &quot;https://overpass-api.de/api/interpreter&quot;}}, &quot;defaultLabelKeys&quot;: [&quot;name&quot;, &quot;title&quot;], &quot;help_links&quot;: [{&quot;label&quot;: &quot;uMap Benutzerhandbuch&quot;, &quot;url&quot;: &quot;https://discover.umap-project.org/&quot;, &quot;lang&quot;: &quot;en/fr&quot;}, {&quot;label&quot;: &quot;Videotutorials&quot;, &quot;url&quot;: &quot;https://discover.umap-project.org/videos/&quot;, &quot;lang&quot;: &quot;en/fr&quot;}, {&quot;label&quot;: &quot;OpenStreetMap.org Forum&quot;, &quot;url&quot;: &quot;https://community.openstreetmap.org/tag/umap&quot;, &quot;lang&quot;: &quot;en/de&quot;}, {&quot;label&quot;: &quot;OpenStreetMap.org Frankreich Forum&quot;, &quot;url&quot;: &quot;https://forum.openstreetmap.fr/c/utiliser/umap/29&quot;, &quot;lang&quot;: &quot;fr&quot;}], &quot;ttl&quot;: {&quot;300&quot;: &quot;5 min&quot;, &quot;3600&quot;: &quot;1 hour&quot;, &quot;86400&quot;: &quot;1 day&quot;}, &quot;default_ttl&quot;: 300, &quot;ORSAPIKey&quot;: &quot;eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImQxNDJmOTNiNjg4MjQ5NWU5ZjZkMmM2ZGM4Y2EwNTQ0IiwiaCI6Im11cm11cjY0In0=&quot;, &quot;ORSHost&quot;: &quot;https://api.heigit.org/openrouteservice&quot;, &quot;created_at&quot;: &quot;2025-01-28T09:26:45.807Z&quot;, &quot;modified_at&quot;: &quot;2025-10-24T07:44:43.319Z&quot;, &quot;edit_statuses&quot;: [[1, &quot;Jeder&quot;], [2, &quot;Nur Bearbeiter und Team&quot;], [3, &quot;Nur Ersteller&quot;]], &quot;datalayer_edit_statuses&quot;: [[0, &quot;erben&quot;], [1, &quot;Jeder&quot;], [2, &quot;Nur Bearbeiter und Team&quot;], [3, &quot;Nur Ersteller&quot;]], &quot;share_statuses&quot;: [[0, &quot;Entwurf (privat)&quot;], [1, &quot;Jeder (\u00d6ffentlich)&quot;], [2, &quot;Jeder mit Link&quot;], [3, &quot;Nur Bearbeiter und Team&quot;]], &quot;user&quot;: {&quot;is_owner&quot;: false}, &quot;lang&quot;: &quot;de&quot;, &quot;locale&quot;: &quot;de&quot;, &quot;datalayers&quot;: [{&quot;properties&quot;: {&quot;id&quot;: &quot;ac9788a9-c215-417d-a580-cb545acd78b9&quot;, &quot;name&quot;: &quot;OpenBuildingMap&quot;, &quot;type&quot;: &quot;Default&quot;, &quot;editMode&quot;: &quot;advanced&quot;, &quot;browsable&quot;: true, &quot;inCaption&quot;: true, &quot;choropleth&quot;: {&quot;breaks&quot;: &quot;0.66,14.71,31.29,43.93,55.17,65.35,74.83,84.62,94.31,100&quot;, &quot;brewer&quot;: &quot;BuGn&quot;, &quot;classes&quot;: 9, &quot;property&quot;: &quot;completeness_index&quot;}, &quot;remoteData&quot;: {}, &quot;permissions&quot;: {&quot;edit_status&quot;: 0}, &quot;displayOnLoad&quot;: true, &quot;popupContentTemplate&quot;: &quot;Quadkey ID: {quadkey}\nDownload link: [[{URL} | {filename}]]\nNumber of buildings: {number_of_buildings}\nCompleteness index: {completeness_index}%\n\nBuildings with occupancy: {percentage_known_occupancy}%\nBuildings with height: {percentage_known_height}%\nBuildings with floorspace: {percentage_known_floorspace}%\n\nSources:\nOpenStreetMap: {percentage_source_openstreetmap}%\nGoogle: {percentage_source_google}%\nMicrosoft: {percentage_source_microsoft}%&quot;}, &quot;id&quot;: &quot;ac9788a9-c215-417d-a580-cb545acd78b9&quot;, &quot;rank&quot;: 0, &quot;permissions&quot;: {&quot;edit_status&quot;: 0}, &quot;editMode&quot;: &quot;disabled&quot;, &quot;referenceVersion&quot;: &quot;1761291883158&quot;}]}}"></script>
+<script defer type="module">
+    
+    import App from '/static/umap/js/modules/app.395ccf268de3.js'
+    
+    U.SETTINGS = JSON.parse(document.getElementById('map-settings').dataset.settings)
+    U.MAP = new App("map", U.SETTINGS)
+</script>
+<!-- djlint:on -->
+
+  
+
+    
+    
+    
+      
+    
+  </body>
+</html>

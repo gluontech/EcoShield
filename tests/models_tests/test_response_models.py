@@ -238,6 +238,9 @@ class TestEnums:
 
     def test_match_method_enum(self) -> None:
         assert MatchMethod("buffer_overlap") == MatchMethod.BUFFER_OVERLAP
+        assert MatchMethod("buffer_overlap_low_confidence") == MatchMethod.BUFFER_OVERLAP_LOW_CONFIDENCE
+        assert MatchMethod("containment_low_confidence") == MatchMethod.CONTAINMENT_LOW_CONFIDENCE
+        assert MatchMethod("centroid_distance") == MatchMethod.CENTROID_DISTANCE
 
     def test_invalid_match_method(self) -> None:
         with pytest.raises(ValueError):

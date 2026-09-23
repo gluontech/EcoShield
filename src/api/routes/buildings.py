@@ -99,7 +99,7 @@ async def assess_buildings(request: BuildingAssessRequest):
             latitude=sr.latitude,
             longitude=sr.longitude,
             footprint_area_m2=sr.footprint_area_m2,
-            vulnerability_class=sr.vulnerability_class.value,
+            vulnerability_class=sr.vulnerability_class.value if hasattr(sr.vulnerability_class, "value") else str(sr.vulnerability_class),
             occupancy_class=getattr(sr, "occupancy_class", None),
             flood_damage_ratio=sr.flood_damage_ratio,
             flood_depth_at_building_m=sr.flood_depth_at_building_m,
@@ -107,7 +107,7 @@ async def assess_buildings(request: BuildingAssessRequest):
             wind_damage_ratio=getattr(sr, "wind_damage_ratio", None),
             max_damage_ratio=sr.max_damage_ratio,
             risk_score=sr.combined_risk_score,
-            risk_tier=sr.risk_tier.value,
+            risk_tier=sr.risk_tier.value if hasattr(sr.risk_tier, "value") else str(sr.risk_tier),
             replacement_value_usd=sr.replacement_value_usd,
             replacement_value_source=getattr(
                 sr, "replacement_value_source", None
@@ -151,6 +151,7 @@ async def assess_buildings(request: BuildingAssessRequest):
         buildings=building_items,
         portfolio_summary=ps,
         data_sources=[
+            "OpenBuildingMap (GFZ Potsdam, Oostwegel et al. 2025)",
             "Google Open Buildings V3", "Google Open Buildings 2.5D Temporal",
             "Overture Maps Buildings", "JRC Global Flood Depth-Damage Functions",
             "Copernicus GLO-30 DEM", "GloFAS v4", "NEX-GDDP-CMIP6",

@@ -72,6 +72,7 @@ class DataSource(str, Enum):
     GOOGLE_OPEN_BUILDINGS_V3 = "google_open_buildings_v3"  # Building footprints
     GOOGLE_OPEN_BUILDINGS_2_5D = "google_open_buildings_2_5d"  # Building heights
     OVERTURE_MAPS_BUILDINGS = "overture_maps_buildings"    # Conflated attributes
+    OPEN_BUILDING_MAP = "open_building_map"                # OpenBuildingMap conflated footprints (GFZ)
 
     # --- Vulnerability data sources (NEW v3.1) ---
     JRC_FLOOD_DAMAGE = "jrc_flood_damage"      # Global depth-damage curves
@@ -221,11 +222,17 @@ class AggregationMethod(str, Enum):
 class MatchMethod(str, Enum):
     """How a building footprint was matched to the query location."""
     BUFFER_OVERLAP = "buffer_overlap"
+    BUFFER_OVERLAP_LOW_CONFIDENCE = "buffer_overlap_low_confidence"
     CENTROID = "centroid"
+    CENTROID_DISTANCE = "centroid_distance"
+    CENTROID_LOW_CONFIDENCE = "centroid_low_confidence"
+    CENTROID_DISTANCE_LOW_CONFIDENCE = "centroid_distance_low_confidence"
     EXACT = "exact"
+    EXACT_LOW_CONFIDENCE = "exact_low_confidence"
     CONTAINMENT = "containment"
-    CONTAINMENT_PART = "containment_part"
     CONTAINMENT_LOW_CONFIDENCE = "containment_low_confidence"
+    CONTAINMENT_PART = "containment_part"
+    CONTAINMENT_PART_LOW_CONFIDENCE = "containment_part_low_confidence"
 
 
 class UncertaintyType(str, Enum):

@@ -138,9 +138,18 @@ class AggregationMethod(str, Enum):
 
 
 class MatchMethod(str, Enum):
-    BUFFER_OVERLAP = "buffer_overlap"
-    CENTROID       = "centroid"
-    EXACT          = "exact"
+    BUFFER_OVERLAP                    = "buffer_overlap"
+    BUFFER_OVERLAP_LOW_CONFIDENCE     = "buffer_overlap_low_confidence"
+    CENTROID                          = "centroid"
+    CENTROID_DISTANCE                 = "centroid_distance"
+    CENTROID_LOW_CONFIDENCE           = "centroid_low_confidence"
+    CENTROID_DISTANCE_LOW_CONFIDENCE  = "centroid_distance_low_confidence"
+    EXACT                             = "exact"
+    EXACT_LOW_CONFIDENCE              = "exact_low_confidence"
+    CONTAINMENT                       = "containment"
+    CONTAINMENT_LOW_CONFIDENCE        = "containment_low_confidence"
+    CONTAINMENT_PART                  = "containment_part"
+    CONTAINMENT_PART_LOW_CONFIDENCE   = "containment_part_low_confidence"
 
 
 class UncertaintyType(str, Enum):
