@@ -20,6 +20,7 @@ Data Sources:
 SEA Coverage: Vietnam, Indonesia, Philippines, Thailand, Singapore — CONFIRMED.
 """
 
+import os
 import logging
 from typing import List, Optional, Dict, Any
 from pathlib import Path
@@ -54,20 +55,25 @@ class OpenBuildingsSource:
         self._init_gee()
     
     def _init_gee(self):
-        """Initialize Google Earth Engine."""
+        """Initialize Google Earth Engine safely if valid service account credentials exist."""
+        import os
         try:
-            # Check if using service account
-            if settings.GEE_SERVICE_ACCOUNT and settings.GEE_KEY_FILE:
+            # Check if using service account with valid, existing key file
+            if (
+                settings.GEE_SERVICE_ACCOUNT
+                and settings.GEE_KEY_FILE
+                and os.path.exists(settings.GEE_KEY_FILE)
+            ):
                 credentials = ee.ServiceAccountCredentials(
                     settings.GEE_SERVICE_ACCOUNT, 
                     settings.GEE_KEY_FILE
                 )
                 ee.Initialize(credentials=credentials, project=self.gee_project)
+                self._gee_available = True
+                logger.info("Google Earth Engine initialized successfully.")
             else:
-                # Fallback to default auth (e.g. gcloud)
-                ee.Initialize(project=self.gee_project)
-                
-            self._gee_available = True
+                logger.debug("GEE service account key file not found. GEE disabled.")
+                self._gee_available = False
         except Exception as e:
             logger.warning(f"GEE init failed: {e}. Falling back to cached data only.")
             self._gee_available = False

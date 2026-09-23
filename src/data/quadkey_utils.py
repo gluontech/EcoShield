@@ -34,5 +34,3 @@ def get_quadkeys_for_bbox(min_lat, max_lat, min_lon, max_lon, zoom=8):
         for y in range(start_y, end_y + 1):
             quadkeys.append(tile_to_quadkey(x, y, zoom))
     return quadkeys
-
-print(get_quadkeys_for_bbox(10.72, 10.73, 106.71, 106.72, zoom=8))

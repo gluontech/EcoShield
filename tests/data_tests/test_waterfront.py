@@ -8,18 +8,24 @@ logging.basicConfig(level=logging.INFO)
 sys.path.append('/home/bim/code/EcoShield')
 from src.workflows.steps.asset_fetch import fetch_buildings_step
 
-with open('/home/bim/code/EcoShield/request.json', 'r') as f:
-    req_data = json.load(f)
+from pathlib import Path
 
-step_data = {
-    "lat": req_data["location"]["lat"],
-    "lon": req_data["location"]["lon"],
-    "name": req_data["location"]["name"],
-    "address": req_data["location"]["address"],
-    "structure_category": req_data["location"]["structure_category"],
-    "structure_type": req_data["location"]["structure_type"],
-    "building_radius_m": 500
-}
+req_file = Path('/home/bim/code/EcoShield/request.json')
+if req_file.exists():
+    with open(req_file, 'r') as f:
+        req_data = json.load(f)
+
+    step_data = {
+        "lat": req_data["location"]["lat"],
+        "lon": req_data["location"]["lon"],
+        "name": req_data["location"]["name"],
+        "address": req_data["location"]["address"],
+        "structure_category": req_data["location"]["structure_category"],
+        "structure_type": req_data["location"]["structure_type"],
+        "building_radius_m": 500
+    }
+else:
+    step_data = {}
 
 async def run():
     print("Running fetch_buildings_step for Waterfront...")
@@ -31,4 +37,6 @@ async def run():
     else:
         print("No buildings returned.")
 
-asyncio.run(run())
+if __name__ == "__main__":
+    asyncio.run(run())
+

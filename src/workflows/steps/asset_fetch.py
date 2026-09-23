@@ -55,8 +55,10 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
     req_gfh = data.get("ground_floor_height_m")
     req_floors = data.get("num_floors")
 
-    # Initialize connection to asset source
-    asset_source = OpenBuildingsSource(db_url=settings.DATABASE_URL)
+    # Initialize connection to OpenBuildingMap asset source (primary)
+    from src.data.open_building_map import OpenBuildingMapSource
+    obm_source = OpenBuildingMapSource(db_url=settings.DATABASE_URL)
+    asset_source = None  # Lazy init only if fallback needed
 
     if not include_buildings:
         logger.info("Building fetch skipped (include_buildings=False)")
@@ -74,7 +76,7 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     # ------------------------------------------------------------------
-    # Fetch buildings from data sources
+    # Fetch buildings from OpenBuildingMap (primary)
     # ------------------------------------------------------------------
     overture_source = None
     places = []
@@ -84,63 +86,86 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
         nonlocal overture_source, places
         try:
             from src.data.overture_buildings import OvertureBuildingsSource
-            overture_source = OvertureBuildingsSource()
+            ov_src = OvertureBuildingsSource()
             raw_buildings = await asyncio.to_thread(
-                overture_source.query_buildings, bbox=search_bbox,
+                ov_src.query_buildings, bbox=search_bbox,
             )
             if raw_buildings:
-                enriched = overture_source.enrich_with_osm_tags(raw_buildings)
+                enriched = ov_src.enrich_with_osm_tags(raw_buildings)
                 if enrich_places:
                     try:
-                        places = await asyncio.to_thread(
-                            overture_source.query_places, bbox=search_bbox,
+                        places = await asyncio.wait_for(
+                            asyncio.to_thread(
+                                ov_src.query_places, bbox=search_bbox,
+                            ),
+                            timeout=5.0,
                         )
                         if places:
-                            enriched = overture_source.enrich_buildings_with_places(
+                            enriched = ov_src.enrich_buildings_with_places(
                                 enriched, places,
                             )
-                    except Exception as e:
+                    except (Exception, asyncio.TimeoutError) as e:
                         logger.warning(f"Overture places enrichment failed (non-fatal): {e}")
-                return overture_source.to_structural_characteristics(enriched)
+                overture_source = ov_src
+                return ov_src.to_structural_characteristics(enriched)
         except Exception as e:
             logger.error(f"Overture Maps fetch failed: {e}")
+            overture_source = None
         return []
 
     structures = []
     overture_tried = False
 
-    # If the user is specifically trying to match a building by name or address,
-    # we MUST use Overture Maps first because Google Open Buildings lacks metadata.
-    if req_name or req_address:
-        logger.info("Name/address provided. Prioritizing Overture Maps for metadata matching.")
-        structures = await fetch_overture(bbox, enrich_places=True)
-        overture_tried = True
+    # 1. Query OpenBuildingMap (local GeoPackage / PostGIS) — Primary Lookup
+    logger.info(f"Fetching buildings in bbox {bbox} from OpenBuildingMap...")
+    structures = await obm_source.get_buildings_in_bbox(bbox)
 
-    # 2. Fetch from default source (Google) if we haven't found anything yet
-    if not structures:
-        logger.info(f"Fetching buildings in bbox {bbox} from default source...")
-        structures = await asset_source.get_buildings_in_bbox(bbox)
-
-    # Fallback to Overture Maps if Google returns empty (and we haven't tried yet)
+    # 2. Secondary Fallback: Query Overture Maps ONLY IF OpenBuildingMap returned no structures
     if not structures and not overture_tried:
-        logger.info("Google Open Buildings returned no results. Attempting Overture Maps fallback...")
-        structures = await fetch_overture(bbox)
+        logger.info("OpenBuildingMap returned no structures. Attempting Overture Maps fallback...")
+        try:
+            structures_ov = await asyncio.wait_for(fetch_overture(bbox, enrich_places=True), timeout=5.0)
+        except asyncio.TimeoutError:
+            logger.warning("Overture Maps fetch timed out after 5.0s. Proceeding with local results.")
+            structures_ov = []
+            overture_source = None
+        except Exception as e:
+            logger.warning(f"Overture Maps fetch failed: {e}. Proceeding with local results.")
+            structures_ov = []
+            overture_source = None
+        overture_tried = True
+        if structures_ov:
+            structures = structures_ov
+
+    # 3. Tertiary Fallback: Query Google Open Buildings GEE ONLY IF still empty
+    if not structures:
+        logger.info("No structures found in OBM or Overture. Attempting GEE Open Buildings fallback...")
+        from src.data.open_buildings import OpenBuildingsSource
+        asset_source = OpenBuildingsSource(db_url=settings.DATABASE_URL)
+        if asset_source._gee_available:
+            structures = await asset_source.get_buildings_in_bbox(bbox)
 
     logger.info(f"Fetched {len(structures)} buildings total")
 
     # 3. Fetch building parts for complex structures (when metadata hints available)
     if (req_name or req_address or structure_type) and overture_source:
         try:
-            building_parts = await asyncio.to_thread(
-                overture_source.query_building_parts, bbox=bbox,
+            building_parts = await asyncio.wait_for(
+                asyncio.to_thread(
+                    overture_source.query_building_parts, bbox=bbox,
+                ),
+                timeout=5.0,
             )
             if building_parts:
                 logger.info(f"Fetched {len(building_parts)} building parts")
+        except asyncio.TimeoutError:
+            logger.warning("Building parts fetch timed out after 5.0s (non-fatal).")
+            building_parts = []
         except Exception as e:
             logger.warning(f"Building parts fetch failed (non-fatal): {e}")
 
-    # 3.5. Enrich Overture buildings with GEE heights if missing
-    if overture_tried and structures and asset_source._gee_available:
+    # 3.5. Enrich Overture buildings with GEE heights if missing and GEE is available
+    if overture_tried and structures and asset_source and getattr(asset_source, "_gee_available", False):
         try:
             import ee
             from src.core.models.asset import BuildingHeight
@@ -311,22 +336,23 @@ async def fetch_buildings_step(data: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     # 4. Create BuildingAdjustedSurface for each building (Gap S)
-    # Use footprint-based median elevation when WKT polygon available,
-    # fall back to centroid single-pixel sampling.
+    # Bounded concurrency: max 10 parallel elevation requests to prevent ThreadPoolExecutor thread starvation
+    sem = asyncio.Semaphore(10)
 
-    async def _fetch_elev(building):
-        centroid = building.footprint.centroid
-        wkt = building.footprint.footprint_wkt
-        try:
-            if wkt and not wkt.startswith("{"):
-                elev = await get_elevation_footprint(wkt)
-            else:
+    async def _fetch_elev_bounded(building):
+        async with sem:
+            centroid = building.footprint.centroid
+            wkt = building.footprint.footprint_wkt
+            try:
+                if wkt and not wkt.startswith("{"):
+                    elev = await get_elevation_footprint(wkt)
+                else:
+                    elev = await get_elevation(centroid.lat, centroid.lon)
+            except Exception:
                 elev = await get_elevation(centroid.lat, centroid.lon)
-        except Exception:
-            elev = await get_elevation(centroid.lat, centroid.lon)
-        return building.footprint.building_id, elev
+            return building.footprint.building_id, elev
 
-    elev_results = await asyncio.gather(*[_fetch_elev(b) for b in structures])
+    elev_results = await asyncio.gather(*[_fetch_elev_bounded(b) for b in structures])
     surfaces = {}
     for st, (bid, elev) in zip(structures, elev_results):
         surfaces[bid] = BuildingAdjustedSurface(

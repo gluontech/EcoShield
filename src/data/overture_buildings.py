@@ -20,8 +20,15 @@ FIX v3.2 (Gap N): Corrected 'latitude'/'longitude' to 'centroid_lat'/'centroid_l
 in to_structural_characteristics() mapping.
 """
 
+import os
 import logging
+from contextlib import contextmanager
 from typing import List, Optional, Dict, Any
+
+# Disable AWS EC2 metadata IP calls to prevent PyArrow S3FileSystem C++ socket stalls
+os.environ["AWS_EC2_METADATA_DISABLED"] = "true"
+os.environ["AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"] = ""
+os.environ["AWS_REGION"] = "us-west-2"
 
 import duckdb
 import overturemaps
@@ -83,16 +90,22 @@ class OvertureBuildingsSource:
     """
     Access Overture Maps buildings via DuckDB + S3 GeoParquet.
     """
-    
+
     def __init__(self):
-        self.conn = duckdb.connect()
+        pass
+
+    @contextmanager
+    def _get_connection(self):
+        """Create a dedicated per-query DuckDB connection to guarantee thread isolation."""
+        conn = duckdb.connect()
         try:
-            self.conn.execute("INSTALL spatial; LOAD spatial;")
-            self.conn.execute("INSTALL httpfs; LOAD httpfs;")
-            self.conn.execute("SET s3_region='us-west-2';")
-        except Exception as e:
-            logger.warning(f"DuckDB init failed (extensions missing?): {e}")
-    
+            conn.execute("INSTALL spatial; LOAD spatial;")
+            conn.execute("INSTALL httpfs; LOAD httpfs;")
+            conn.execute("SET s3_region='us-west-2';")
+            yield conn
+        finally:
+            conn.close()
+
     def query_buildings(
         self,
         bbox: BoundingBox,
@@ -126,17 +139,18 @@ class OvertureBuildingsSource:
         FROM arrow_table
         LIMIT {limit}
         """
-        
+
         try:
-            result = self.conn.execute(query).fetchall()
+            with self._get_connection() as conn:
+                result = conn.execute(query).fetchall()
             columns = ['id', 'geometry_wkt', 'area_m2', 'centroid_lat', 'centroid_lon',
                         'height', 'num_floors', 'class', 'subtype', 'sources', 'names']
-            
+
             return [dict(zip(columns, row)) for row in result]
         except Exception as e:
             logger.error(f"DuckDB query failed: {e}")
             return []
-    
+
     def query_building_parts(
         self,
         bbox: BoundingBox,
@@ -173,7 +187,8 @@ class OvertureBuildingsSource:
         """
 
         try:
-            result = self.conn.execute(query).fetchall()
+            with self._get_connection() as conn:
+                result = conn.execute(query).fetchall()
             columns = ['id', 'geometry_wkt', 'area_m2', 'centroid_lat', 'centroid_lon',
                         'height', 'num_floors', 'building_id']
             return [dict(zip(columns, row)) for row in result]
@@ -214,7 +229,8 @@ class OvertureBuildingsSource:
         """
 
         try:
-            result = self.conn.execute(query).fetchall()
+            with self._get_connection() as conn:
+                result = conn.execute(query).fetchall()
             columns = ['id', 'centroid_lat', 'centroid_lon', 'names',
                         'addresses', 'categories']
             return [dict(zip(columns, row)) for row in result]

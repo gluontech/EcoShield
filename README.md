@@ -86,7 +86,7 @@ Key variables in `.env`:
 | `POSTGRES_DB` | Database name | `ecoshield` |
 | `REDIS_PORT` | Redis port | `6379` |
 | `GEE_SERVICE_ACCOUNT` | Google Earth Engine service account | *(optional)* |
-| `GEE_KEY_FILE` | Path to GEE JSON key inside container | `/app/secrets/earth-engine-key.json` |
+| `GEE_KEY_FILE` | Path to GEE JSON key file | *(optional)* |
 
 > ⚠️ **Security:** Never commit real API keys or credentials. Use environment variables or Docker secrets.
 

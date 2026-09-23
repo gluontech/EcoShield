@@ -51,6 +51,13 @@ class Settings(BaseSettings):
     def BUILDINGS_PATH(self) -> Path:
         return self.CACHE_DIR / "buildings"
 
+    @computed_field
+    def OBM_DATA_PATH(self) -> Path:
+        return self.DATA_DIR / "buildings" / "obm"
+
+    OBM_POSTGIS_TABLE: str = "obm_buildings"
+    OBM_USE_POSTGIS: bool = True
+
     # --- External API Keys ---
     CDS_API_KEY: Optional[str] = None
     CDS_API_URL: str = "https://cds.climate.copernicus.eu/api/v2"
