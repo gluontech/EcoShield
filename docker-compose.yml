@@ -37,7 +37,7 @@ services:
     restart: on-failure
 
   db:
-    image: postgis/postgis:15-3.3
+    image: postgis/postgis:15-3.3-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-ecoshield}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -56,7 +56,7 @@ services:
       - ecoshield-network
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.2-alpine
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
@@ -64,19 +64,19 @@ services:
     networks:
       - ecoshield-network
 
-  minio:
-    image: minio/minio
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-    networks:
-      - ecoshield-network
+  # minio:
+  #   image: minio/minio:latest
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #   environment:
+  #     MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+  #     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+  #   volumes:
+  #     - minio_data:/data
+  #   command: server /data --console-address ":9001"
+  #   networks:
+  #     - ecoshield-network
 
 networks:
   ecoshield-network:
